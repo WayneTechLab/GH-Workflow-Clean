@@ -1,6 +1,6 @@
-# GitHub Actions Cleanup CLI
+# GH-Workflow-Clean
 
-`gh-actions-cleanup` is a terminal-first cleanup command for macOS that uses the GitHub CLI you already authenticate with.
+`gh-actions-cleanup` is a terminal-first macOS CLI for shutting down and cleaning up GitHub Actions usage across repositories.
 
 It can:
 
@@ -56,8 +56,22 @@ gh-actions-cleanup --repo WayneTechLab/networkschat --delete-caches --yes
 gh-actions-cleanup --repo WayneTechLab/networkschat --disable-workflows --yes
 ```
 
+## Notice
+
+- Copyright (c) 2026 Wayne Tech Lab LLC
+- Use at your own risk.
+- This project is provided as-is, without warranties or guarantees of any kind.
+- You are responsible for reviewing any cleanup action before running it against your repositories.
+
+## Creator Note
+
+Built by Lucas / SatoshiUNO.
+
+- Wayne Tech Lab LLC: [WayneTechLab.com](https://WayneTechLab.com)
+- Public portfolio: [Networks.CHAT](https://Networks.CHAT)
+
 ## Notes
 
 - The command works against whichever account is active for the selected host. If you have multiple authenticated accounts on the same host, it can switch using `gh auth switch`.
-- For private repositories, your token needs scopes that allow repository and workflow management.
-- `--dry-run` is the safe way to confirm what would be touched before deleting anything.
+- Your token needs repository and workflow access to delete Actions resources.
+- `--dry-run` is the safest way to confirm what would be touched before deleting anything.
