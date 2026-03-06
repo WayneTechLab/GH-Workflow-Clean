@@ -26,7 +26,22 @@ chmod +x gh-actions-cleanup install-gh-actions-cleanup.sh
 ./install-gh-actions-cleanup.sh
 ```
 
-If the installer uses `~/.local/bin` and that path is not already in your shell `PATH`, add the export line it prints into `~/.zshrc`, then open a new terminal.
+By default, the installer:
+
+- installs the terminal command into a writable bin directory
+- installs a macOS app bundle into `~/Applications`
+- generates the app icon locally during install
+
+The installer is intended for macOS and will stop if you run it on another platform.
+
+If the command install path is not already in your shell `PATH`, add the export line the installer prints into `~/.zshrc`, then open a new terminal.
+
+You can also install only one target:
+
+```bash
+./install-gh-actions-cleanup.sh --cli-only
+./install-gh-actions-cleanup.sh --app-only
+```
 
 ## Quick Start
 
@@ -47,6 +62,11 @@ Safe preview first:
 ```bash
 gh-actions-cleanup --repo OWNER/REPO --all --dry-run --yes
 ```
+
+App launch:
+
+- open `GH Workflow Clean.app` from Finder, Spotlight, or Launchpad
+- the app opens Terminal and starts the interactive CLI
 
 ## Common Commands
 
@@ -80,6 +100,7 @@ gh-actions-cleanup --repo OWNER/REPO --delete-caches --yes
 - If multiple accounts are authenticated on one host, it can switch using `gh auth switch`.
 - The token in use needs repository and workflow access to delete Actions resources.
 - `--dry-run` is the safest way to confirm intended changes before deleting anything.
+- The macOS app uses Terminal for the interactive session and may ask for automation permission the first time it launches.
 
 ## Notice
 

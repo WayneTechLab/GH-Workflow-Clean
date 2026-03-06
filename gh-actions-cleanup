@@ -21,6 +21,9 @@ ASSUME_YES=0
 DRY_RUN=0
 NO_COLOR=0
 
+ORIGINAL_ACCOUNT=""
+SWITCHED_ACCOUNT=0
+
 C_RESET=""
 C_RED=""
 C_GREEN=""
@@ -71,6 +74,18 @@ die() {
   exit 1
 }
 
+cleanup_on_exit() {
+  local exit_code=$?
+
+  trap - EXIT
+  if [[ "$SWITCHED_ACCOUNT" -eq 1 && -n "$ORIGINAL_ACCOUNT" && -n "$HOST" ]]; then
+    gh auth switch --hostname "$HOST" --user "$ORIGINAL_ACCOUNT" >/dev/null 2>&1 || \
+      printf "[warn] Failed to restore the original GitHub account %s on %s\n" "$ORIGINAL_ACCOUNT" "$HOST" >&2
+  fi
+
+  exit "$exit_code"
+}
+
 usage() {
   cat <<EOF
 ${APP_NAME} ${VERSION}
@@ -93,13 +108,14 @@ Options:
   --yes                     Skip the final confirmation prompt
   --dry-run                 Show what would be deleted without changing anything
   --no-color                Disable colored output
+  --version                 Show the current version
   --help                    Show this help text
 
 Examples:
   ${APP_NAME}
   ${APP_NAME} --all
-  ${APP_NAME} --repo WayneTechLab/networkschat --all --yes
-  ${APP_NAME} --host github.com --account WayneTechLab --repo WayneTechLab/networkschat --delete-runs --yes
+  ${APP_NAME} --repo OWNER/REPO --all --yes
+  ${APP_NAME} --host github.com --account USERNAME --repo OWNER/REPO --delete-runs --yes
 EOF
 }
 
@@ -172,13 +188,14 @@ choose_from_list() {
 
   [[ "${#options[@]}" -gt 0 ]] || die "Internal error: no options for $title"
 
-  printf "%s%s%s\n" "$C_BOLD" "$title" "$C_RESET"
+  printf "%s%s%s\n" "$C_BOLD" "$title" "$C_RESET" >&2
   for i in "${!options[@]}"; do
-    printf "  %d) %s\n" "$((i + 1))" "${options[$i]}"
+    printf "  %d) %s\n" "$((i + 1))" "${options[$i]}" >&2
   done
 
   while true; do
-    read -r -p "Choose 1-${#options[@]}: " choice
+    printf "Choose 1-%s: " "${#options[@]}" >&2
+    read -r choice
     [[ "$choice" =~ ^[0-9]+$ ]] || { warn "Enter a number."; continue; }
     if (( choice >= 1 && choice <= ${#options[@]} )); then
       printf "%s" "${options[$((choice - 1))]}"
@@ -202,18 +219,110 @@ parse_repo_input() {
   REPO_NAME="${input##*/}"
 }
 
+gh_config_file() {
+  local config_path="${XDG_CONFIG_HOME:-$HOME/.config}/gh/hosts.yml"
+
+  if [[ -f "$config_path" ]]; then
+    printf "%s" "$config_path"
+  fi
+}
+
+load_hosts_from_config() {
+  local config_path=""
+
+  config_path="$(gh_config_file)"
+  [[ -n "$config_path" ]] || return 0
+
+  awk '
+    /^[^[:space:]][^:]*:$/ {
+      host = $0
+      sub(/:$/, "", host)
+      print host
+    }
+  ' "$config_path"
+}
+
+load_active_account_for_host() {
+  local host="$1"
+  local config_path=""
+
+  config_path="$(gh_config_file)"
+  [[ -n "$config_path" ]] || return 0
+
+  awk -v host="$host" '
+    /^[^[:space:]][^:]*:$/ {
+      current = $0
+      sub(/:$/, "", current)
+      in_host = (current == host)
+      next
+    }
+    in_host && /^    user: / {
+      user = $0
+      sub(/^    user: /, "", user)
+      print user
+      exit
+    }
+  ' "$config_path"
+}
+
+load_accounts_for_host() {
+  local host="$1"
+  local config_path=""
+  local active_account=""
+  local accounts=""
+
+  config_path="$(gh_config_file)"
+  [[ -n "$config_path" ]] || return 0
+
+  active_account="$(load_active_account_for_host "$host")"
+
+  accounts="$(awk -v host="$host" -v active_account="$active_account" '
+    /^[^[:space:]][^:]*:$/ {
+      current = $0
+      sub(/:$/, "", current)
+      in_host = (current == host)
+      in_users = 0
+      next
+    }
+    in_host && /^    users:$/ {
+      in_users = 1
+      next
+    }
+    in_host && /^    [^ ]/ && $0 !~ /^    users:$/ {
+      in_users = 0
+    }
+    in_host && in_users && /^        [^[:space:]][^:]*:$/ {
+      user = $0
+      sub(/^        /, "", user)
+      sub(/:$/, "", user)
+      state = (user == active_account ? "active" : "available")
+      print user "\t" state
+    }
+  ' "$config_path")"
+
+  if [[ -z "$accounts" && -n "$active_account" ]]; then
+    printf "%s\tactive\n" "$active_account"
+    return 0
+  fi
+
+  printf "%s\n" "$accounts"
+}
+
 load_hosts() {
+  local hosts=""
+
+  hosts="$(load_hosts_from_config)"
+  if [[ -n "$hosts" ]]; then
+    printf "%s\n" "$hosts"
+    return 0
+  fi
+
   gh auth status --json hosts --jq '
     .hosts
     | to_entries[]
     | select((.value | length) > 0)
     | .key
   ' 2>/dev/null || true
-}
-
-load_accounts_for_host() {
-  local host="$1"
-  gh auth status --hostname "$host" --json hosts --jq ".hosts[\"$host\"][]? | select(.state == \"success\") | [.login, (if .active then \"active\" else \"available\" end)] | @tsv" 2>/dev/null || true
 }
 
 ensure_auth_for_host() {
@@ -271,10 +380,18 @@ select_account() {
   local state=""
   local active_account=""
   local selected=""
+  local seen_accounts="|"
 
   while IFS= read -r line; do
     [[ -n "$line" ]] && lines+=("$line")
   done < <(load_accounts_for_host "$HOST")
+
+  if [[ "${#lines[@]}" -eq 0 ]]; then
+    ensure_auth_for_host "$HOST"
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && lines+=("$line")
+    done < <(load_accounts_for_host "$HOST")
+  fi
 
   [[ "${#lines[@]}" -gt 0 ]] || die "No authenticated accounts found for $HOST"
 
@@ -291,6 +408,8 @@ select_account() {
       if [[ "$login" == "$ACCOUNT" ]]; then
         if [[ "$ACCOUNT" != "$active_account" ]]; then
           info "Switching active GitHub account on $HOST to $ACCOUNT"
+          ORIGINAL_ACCOUNT="${active_account:-}"
+          SWITCHED_ACCOUNT=1
           gh auth switch --hostname "$HOST" --user "$ACCOUNT" >/dev/null || die "Failed to switch GitHub account"
         fi
         return 0
@@ -313,6 +432,8 @@ select_account() {
 
   for line in "${lines[@]}"; do
     IFS=$'\t' read -r login state <<<"$line"
+    [[ "$seen_accounts" == *"|$login|"* ]] && continue
+    seen_accounts="${seen_accounts}${login}|"
     if [[ "$state" == "active" ]]; then
       menu+=("$login (active)")
     else
@@ -325,13 +446,13 @@ select_account() {
 
   if [[ "$ACCOUNT" != "$active_account" ]]; then
     info "Switching active GitHub account on $HOST to $ACCOUNT"
+    ORIGINAL_ACCOUNT="${active_account:-}"
+    SWITCHED_ACCOUNT=1
     gh auth switch --hostname "$HOST" --user "$ACCOUNT" >/dev/null || die "Failed to switch GitHub account"
   fi
 }
 
 resolve_repo() {
-  local repo_input=""
-
   if [[ -n "$REPO_SPEC" ]]; then
     parse_repo_input "$REPO_SPEC"
   else
@@ -376,10 +497,39 @@ select_actions() {
 count_from_api() {
   local path="$1"
   local jq_expr="$2"
-  gh api --hostname "$HOST" "$path" --paginate --jq "$jq_expr" 2>/dev/null | awk 'NF {count++} END {print count+0}'
+  local output=""
+
+  if ! output="$(gh api --hostname "$HOST" "$path" --paginate --jq "$jq_expr" 2>/dev/null)"; then
+    printf "0"
+    return 0
+  fi
+
+  if [[ -z "$output" ]]; then
+    printf "0"
+    return 0
+  fi
+
+  printf "%s\n" "$output" | awk 'NF && $0 != "null" {count++} END {print count+0}'
+}
+
+collect_api_ids() {
+  local path="$1"
+  local jq_expr="$2"
+  local output=""
+
+  if ! output="$(gh api --hostname "$HOST" "$path" --paginate --jq "$jq_expr" 2>/dev/null)"; then
+    return 1
+  fi
+
+  if [[ -n "$output" ]]; then
+    printf "%s\n" "$output" | awk 'NF && $0 != "null" {print}'
+  fi
 }
 
 show_summary() {
+  local workflow_count=""
+  local cache_count=""
+
   printf "%sCleanup summary%s\n" "$C_BOLD" "$C_RESET"
   printf "  Host: %s\n" "$HOST"
   printf "  Account: %s\n" "$ACCOUNT"
@@ -391,11 +541,15 @@ show_summary() {
   printf "  Dry run: %s\n" "$([[ "$DRY_RUN" -eq 1 ]] && printf yes || printf no)"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    [[ "$DO_DISABLE" -eq 1 ]] && printf "  Workflows found: %s\n" "$(gh workflow list -R "$REPO_SPEC" -a --json id --jq 'length' 2>/dev/null || printf "0")"
+    if [[ "$DO_DISABLE" -eq 1 ]]; then
+      workflow_count="$(gh workflow list -R "$REPO_SPEC" -a -L 1000 --json id --jq 'length' 2>/dev/null || printf "0")"
+      printf "  Workflows found: %s\n" "${workflow_count:-0}"
+    fi
     [[ "$DO_RUNS" -eq 1 ]] && printf "  Workflow runs found: %s\n" "$(count_from_api "repos/${OWNER}/${REPO_NAME}/actions/runs?per_page=100" '.workflow_runs[]?.id')"
     [[ "$DO_ARTIFACTS" -eq 1 ]] && printf "  Artifacts found: %s\n" "$(count_from_api "repos/${OWNER}/${REPO_NAME}/actions/artifacts?per_page=100" '.artifacts[]?.id')"
     if [[ "$DO_CACHES" -eq 1 ]]; then
-      printf "  Caches found (up to 1000 listed): %s\n" "$(gh cache list -R "$REPO_SPEC" --limit 1000 --json id --jq 'length' 2>/dev/null || printf "0")"
+      cache_count="$(gh cache list -R "$REPO_SPEC" --limit 1000 --json id --jq 'length' 2>/dev/null || printf "0")"
+      printf "  Caches found (up to 1000 listed): %s\n" "${cache_count:-0}"
     fi
   fi
 }
@@ -403,13 +557,19 @@ show_summary() {
 delete_runs() {
   local -a run_ids=()
   local id=""
+  local ids_output=""
   local total=0
   local completed=0
   local failed=0
 
+  if ! ids_output="$(collect_api_ids "repos/${OWNER}/${REPO_NAME}/actions/runs?per_page=100" '.workflow_runs[]?.id')"; then
+    warn "Could not list workflow runs. Check GitHub API rate limits and token permissions."
+    return 0
+  fi
+
   while IFS= read -r id; do
     [[ -n "$id" ]] && run_ids+=("$id")
-  done < <(gh api --hostname "$HOST" "repos/${OWNER}/${REPO_NAME}/actions/runs?per_page=100" --paginate --jq '.workflow_runs[]?.id' 2>/dev/null || true)
+  done <<<"$ids_output"
 
   total="${#run_ids[@]}"
   if [[ "$total" -eq 0 ]]; then
@@ -454,13 +614,19 @@ delete_runs() {
 delete_artifacts() {
   local -a artifact_ids=()
   local id=""
+  local ids_output=""
   local total=0
   local completed=0
   local failed=0
 
+  if ! ids_output="$(collect_api_ids "repos/${OWNER}/${REPO_NAME}/actions/artifacts?per_page=100" '.artifacts[]?.id')"; then
+    warn "Could not list artifacts. Check GitHub API rate limits and token permissions."
+    return 0
+  fi
+
   while IFS= read -r id; do
     [[ -n "$id" ]] && artifact_ids+=("$id")
-  done < <(gh api --hostname "$HOST" "repos/${OWNER}/${REPO_NAME}/actions/artifacts?per_page=100" --paginate --jq '.artifacts[]?.id' 2>/dev/null || true)
+  done <<<"$ids_output"
 
   total="${#artifact_ids[@]}"
   if [[ "$total" -eq 0 ]]; then
@@ -526,7 +692,7 @@ disable_workflows() {
 
   while IFS= read -r line; do
     [[ -n "$line" ]] && workflows+=("$line")
-  done < <(gh workflow list -R "$REPO_SPEC" -a --json id,name,state --jq '.[] | [.id, .name, .state] | @tsv' 2>/dev/null || true)
+  done < <(gh workflow list -R "$REPO_SPEC" -a -L 1000 --json id,name,state --jq '.[] | [.id, .name, .state] | @tsv' 2>/dev/null || true)
 
   total="${#workflows[@]}"
   if [[ "$total" -eq 0 ]]; then
@@ -614,6 +780,10 @@ parse_args() {
         NO_COLOR=1
         shift
         ;;
+      --version)
+        printf "%s\n" "$VERSION"
+        exit 0
+        ;;
       --help|-h)
         usage
         exit 0
@@ -632,6 +802,7 @@ parse_args() {
 main() {
   parse_args "$@"
   init_colors
+  trap cleanup_on_exit EXIT
 
   require_command gh
 
