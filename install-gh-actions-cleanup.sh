@@ -15,6 +15,7 @@ SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
 SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
 SOURCE_INFO_PLIST_TEMPLATE="${SCRIPT_DIR}/macos/Info.plist.template"
 SOURCE_ICONSET_DIR="${SCRIPT_DIR}/assets/AppIcon.appiconset"
+SOURCE_ICON_1024="${SCRIPT_DIR}/assets/icon-1024.png"
 SOURCE_LOGO_CARD="${SCRIPT_DIR}/assets/logos/logo-card-square.png"
 SOURCE_LOGO_LOCKUP="${SCRIPT_DIR}/assets/logos/logo-horizontal-lockup.png"
 SOURCE_HERO="${SCRIPT_DIR}/assets/social/hero-2560x1600.png"
@@ -25,7 +26,7 @@ SOURCE_TOS="${SCRIPT_DIR}/TERMS-OF-SERVICE.md"
 SOURCE_HELP_DIR="${SCRIPT_DIR}/docs"
 SOURCE_PROJECT_INFO="${SCRIPT_DIR}/macos/PROJECT-INFO.md"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.2.1}"
+APP_VERSION="${APP_VERSION:-0.2.2}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -196,28 +197,35 @@ render_icon_icns() {
   local tmpdir=""
   local iconset_dir=""
   local icns_path=""
-  local cropped_png=""
-  local size=""
-  local double_size=""
+
+  copy_icon_asset() {
+    local source_name="$1"
+    local target_name="$2"
+    local source_path="${SOURCE_ICONSET_DIR}/${source_name}"
+
+    [[ -f "$source_path" ]] || die "Missing icon asset: $source_path"
+    cp "$source_path" "${iconset_dir}/${target_name}"
+  }
 
   require_command iconutil
-  require_command sips
 
-  [[ -f "$SOURCE_LOGO_CARD" ]] || die "Cannot find logo source at $SOURCE_LOGO_CARD"
+  [[ -d "$SOURCE_ICONSET_DIR" ]] || die "Cannot find AppIcon source at $SOURCE_ICONSET_DIR"
 
   tmpdir="$(mktemp -d /tmp/gh-actions-cleanup-icon.XXXXXX)"
   register_temp_dir "$tmpdir"
-  cropped_png="$tmpdir/logo-card-cropped.png"
-
-  sips -c 840 840 "$SOURCE_LOGO_CARD" --out "$cropped_png" >/dev/null
-
   iconset_dir="$tmpdir/AppIcon.iconset"
   mkdir -p "$iconset_dir"
-  for size in 16 32 128 256 512; do
-    double_size=$((size * 2))
-    sips -z "$size" "$size" "$cropped_png" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null
-    sips -z "$double_size" "$double_size" "$cropped_png" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null
-  done
+
+  copy_icon_asset "appicon-16x16@1x.png" "icon_16x16.png"
+  copy_icon_asset "appicon-16x16@2x.png" "icon_16x16@2x.png"
+  copy_icon_asset "appicon-32x32@1x.png" "icon_32x32.png"
+  copy_icon_asset "appicon-32x32@2x.png" "icon_32x32@2x.png"
+  copy_icon_asset "appicon-128x128@1x.png" "icon_128x128.png"
+  copy_icon_asset "appicon-128x128@2x.png" "icon_128x128@2x.png"
+  copy_icon_asset "appicon-256x256@1x.png" "icon_256x256.png"
+  copy_icon_asset "appicon-256x256@2x.png" "icon_256x256@2x.png"
+  copy_icon_asset "appicon-512x512@1x.png" "icon_512x512.png"
+  copy_icon_asset "appicon-512x512@2x.png" "icon_512x512@2x.png"
 
   icns_path="$tmpdir/AppIcon.icns"
   iconutil -c icns "$iconset_dir" -o "$icns_path" >/dev/null
@@ -395,6 +403,7 @@ install_app_bundle() {
   fi
   copy_file_if_present "$SOURCE_LOGO_CARD" "$resources_dir/logo-card-square.png"
   copy_file_if_present "$SOURCE_LOGO_LOCKUP" "$resources_dir/logo-horizontal-lockup.png"
+  copy_file_if_present "$SOURCE_ICON_1024" "$resources_dir/icon-1024.png"
   copy_file_if_present "$SOURCE_HERO" "$resources_dir/hero-2560x1600.png"
   copy_help_resources "$resources_dir"
 

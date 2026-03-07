@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.1"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.2"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -231,7 +231,7 @@ final class CleanupViewModel: ObservableObject {
   }
 
   var bundledBrandMark: NSImage? {
-    bundledImage(named: "logo-card-square.png")
+    bundledImage(named: "icon-1024.png") ?? bundledImage(named: "logo-card-square.png")
   }
 
   var bundledLockup: NSImage? {
@@ -1310,7 +1310,7 @@ struct BrandMarkSquareView: View {
         Image(nsImage: image)
           .resizable()
           .interpolation(.high)
-          .aspectRatio(contentMode: .fill)
+          .aspectRatio(contentMode: .fit)
           .frame(width: size, height: size)
           .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
       } else {
@@ -2084,7 +2084,7 @@ struct ContentView: View {
               .font(.system(size: 14, weight: .bold, design: .rounded))
               .foregroundStyle(DashboardTheme.text)
 
-            Text("The native app is using the supplied production logo pack, app icon set, and brand docs.")
+            Text("The native app is using the official press-kit logo pack, AppIcon set, and brand docs.")
               .font(.system(size: 12, weight: .medium, design: .rounded))
               .foregroundStyle(DashboardTheme.muted)
               .lineSpacing(2)

@@ -3,7 +3,7 @@
 set -uo pipefail
 
 APP_NAME="gh-actions-cleanup"
-VERSION="0.2.1"
+VERSION="0.2.2"
 APP_SUPPORT_DIR="$HOME/Library/Application Support/GH Workflow Clean"
 LAST_SESSION_FILE="$APP_SUPPORT_DIR/last-session.env"
 LEGACY_LAST_SESSION_FILE="$HOME/Library/Application Support/GitHub Action Clean-Up Tool/last-session.env"
@@ -815,13 +815,91 @@ collect_api_ids() {
 collect_workflow_rows() {
   local output=""
 
-  if ! output="$(gh workflow list -R "$REPO_SPEC" -a -L 1000 --json id,name,state --jq '.[] | [.id, .name, .state] | @tsv' 2>/dev/null)"; then
+  if ! output="$(gh workflow list -R "$REPO_SPEC" -a -L 1000 --json id,name,state,path --jq '.[] | [.id, .name, .state, (.path // "")] | @tsv' 2>/dev/null)"; then
     return 1
   fi
 
   if [[ -n "$output" ]]; then
     printf "%s\n" "$output"
   fi
+}
+
+to_lower() {
+  printf "%s" "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+first_line() {
+  printf "%s" "$1" | awk 'NR == 1 { sub(/[[:space:]]+$/, ""); print; exit }'
+}
+
+workflow_skip_category() {
+  local name="$1"
+  local state="$2"
+  local path="${3:-}"
+  local lowered_name=""
+  local lowered_path=""
+
+  case "$state" in
+    disabled_manually|disabled_inactivity)
+      printf "already_disabled"
+      return 0
+      ;;
+    active|"")
+      ;;
+    *)
+      printf "state:%s" "$state"
+      return 0
+      ;;
+  esac
+
+  lowered_name="$(to_lower "$name")"
+  lowered_path="$(to_lower "$path")"
+
+  case "$lowered_name" in
+    "dependabot updates"|"copilot code review"|"copilot coding agent")
+      printf "managed"
+      return 0
+      ;;
+  esac
+
+  case "$lowered_path" in
+    *"/dependabot-"*|*"/copilot-"*)
+      printf "managed"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+workflow_disable_error_is_skippable() {
+  local lowered_output=""
+
+  lowered_output="$(to_lower "$1")"
+  [[ -n "$lowered_output" ]] || return 1
+
+  case "$lowered_output" in
+    *"could not find any workflows named"*)
+      return 0
+      ;;
+    *"workflow not found"*)
+      return 0
+      ;;
+    *"workflow does not exist"*)
+      return 0
+      ;;
+    *"cannot disable a disabled workflow"*)
+      return 0
+      ;;
+    *"already disabled"*)
+      return 0
+      ;;
+    *"not enabled"*)
+      return 0
+      ;;
+  esac
+
+  return 1
 }
 
 collect_run_ids() {
@@ -1064,8 +1142,24 @@ delete_artifacts() {
 }
 
 delete_caches() {
+  local cache_count=""
+
   if [[ "$DRY_RUN" -eq 1 ]]; then
     info "Dry run: caches would be deleted with gh cache delete --all"
+    return 0
+  fi
+
+  if ! cache_count="$(gh cache list --repo "$REPO_SPEC" --limit 1 --json id --jq 'length' 2>/dev/null)"; then
+    warn "Could not list Actions caches. Check GitHub API rate limits and token permissions."
+    return 1
+  fi
+
+  if [[ ! "$cache_count" =~ ^[0-9]+$ ]]; then
+    cache_count=0
+  fi
+
+  if [[ "$cache_count" -eq 0 ]]; then
+    info "No Actions caches found."
     return 0
   fi
 
@@ -1084,10 +1178,16 @@ disable_workflows() {
   local id=""
   local name=""
   local state=""
+  local path=""
   local workflows_output=""
+  local disable_output=""
+  local skip_category=""
+  local error_excerpt=""
   local total=0
   local changed=0
   local failed=0
+  local skipped=0
+  local already_disabled=0
 
   if ! workflows_output="$(collect_workflow_rows)"; then
     warn "Could not list workflows. Check GitHub API rate limits and token permissions."
@@ -1104,12 +1204,25 @@ disable_workflows() {
     return 0
   fi
 
-  info "Checking $total workflows"
+  info "Reviewing $total workflows"
   for line in "${workflows[@]}"; do
-    IFS=$'\t' read -r id name state <<<"$line"
+    IFS=$'\t' read -r id name state path <<<"$line"
 
-    if [[ "$state" == "disabled_manually" || "$state" == "disabled_inactivity" ]]; then
-      info "Already disabled: $name"
+    if skip_category="$(workflow_skip_category "$name" "$state" "$path")"; then
+      case "$skip_category" in
+        already_disabled)
+          info "Already disabled: $name"
+          already_disabled=$((already_disabled + 1))
+          ;;
+        managed)
+          info "Skipped GitHub-managed workflow: $name"
+          skipped=$((skipped + 1))
+          ;;
+        state:*)
+          info "Skipped workflow in state ${skip_category#state:}: $name"
+          skipped=$((skipped + 1))
+          ;;
+      esac
       continue
     fi
 
@@ -1119,11 +1232,19 @@ disable_workflows() {
       continue
     fi
 
-    if gh workflow disable "$id" -R "$REPO_SPEC" >/dev/null 2>&1; then
+    if disable_output="$(gh workflow disable "$id" -R "$REPO_SPEC" 2>&1)"; then
       success "Disabled workflow: $name"
       changed=$((changed + 1))
+    elif workflow_disable_error_is_skippable "$disable_output"; then
+      info "Skipped unavailable workflow: $name"
+      skipped=$((skipped + 1))
     else
-      warn "Failed to disable workflow: $name"
+      error_excerpt="$(first_line "$disable_output")"
+      if [[ -n "$error_excerpt" ]]; then
+        warn "Failed to disable workflow: $name ($error_excerpt)"
+      else
+        warn "Failed to disable workflow: $name"
+      fi
       failed=$((failed + 1))
     fi
   done
@@ -1131,13 +1252,20 @@ disable_workflows() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     success "Dry run complete for workflows"
     return 0
+  elif [[ "$failed" -gt 0 ]]; then
+    warn "Workflow disable summary: $changed disabled, $already_disabled already disabled, $skipped skipped, $failed failed"
+    return 1
+  elif [[ "$changed" -gt 0 ]]; then
+    success "Workflow disable summary: $changed disabled, $already_disabled already disabled, $skipped skipped"
+    return 0
+  elif [[ "$skipped" -gt 0 ]]; then
+    info "No workflow disable changes needed. $already_disabled already disabled, $skipped skipped."
+    return 0
   elif [[ "$changed" -eq 0 ]]; then
     info "All workflows were already disabled."
     return 0
-  elif [[ "$failed" -eq 0 ]]; then
-    return 0
   else
-    return 1
+    return 0
   fi
 }
 

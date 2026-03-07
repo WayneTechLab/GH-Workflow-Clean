@@ -19,7 +19,7 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.2.1`
+Current release: `0.2.2`
 
 ## Warning
 
@@ -70,6 +70,7 @@ open "/Applications/GH Workflow Clean.app"
 - stores only the last host, account, and repo for convenience
 - does not store GitHub tokens
 - redacts common token and key patterns from the native app log panel
+- uses the official press-kit logo and AppIcon assets in the native macOS app
 
 ## macOS App
 
