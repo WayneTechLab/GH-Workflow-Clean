@@ -3,7 +3,7 @@
 set -uo pipefail
 
 APP_NAME="gh-actions-cleanup"
-VERSION="0.0.8"
+VERSION="0.0.9"
 APP_SUPPORT_DIR="$HOME/Library/Application Support/GH Workflow Clean"
 LAST_SESSION_FILE="$APP_SUPPORT_DIR/last-session.env"
 

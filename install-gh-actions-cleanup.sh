@@ -13,7 +13,7 @@ SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
 SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
 SOURCE_ICON="${SCRIPT_DIR}/assets/app-icon.svg"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.0.8}"
+APP_VERSION="${APP_VERSION:-0.0.9}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -44,7 +44,7 @@ Options:
 
 Defaults:
   - command install: best writable path from /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, ~/bin
-  - app install: ~/Applications
+  - app install: /Applications when writable, otherwise ~/Applications
 
 Notes:
   - stale copies in /Applications, ~/Applications, and common CLI bin paths are removed first

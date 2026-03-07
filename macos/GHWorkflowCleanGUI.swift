@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.8"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.9"
 private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
 private let defaultSearchPaths = [
@@ -1473,18 +1473,35 @@ struct ContentView: View {
             }
           }
           .padding(16)
-          .frame(maxWidth: 1720)
+          .frame(maxWidth: 2440)
           .frame(maxWidth: .infinity)
         }
       }
     }
-    .frame(minWidth: 960, minHeight: 760)
+    .frame(minWidth: 720, minHeight: 620)
     .preferredColorScheme(.dark)
   }
 
   @ViewBuilder
   private func dashboardLayout(for width: CGFloat) -> some View {
-    if width >= 1560 {
+    if width >= 2100 {
+      HStack(alignment: .top, spacing: 18) {
+        authPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        repositoryPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        VStack(alignment: .leading, spacing: 18) {
+          cleanupPanel
+          executionPanel
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        logPanel(minHeight: 760)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+      }
+    } else if width >= 1560 {
       HStack(alignment: .top, spacing: 18) {
         VStack(alignment: .leading, spacing: 18) {
           authPanel
@@ -1834,13 +1851,48 @@ final class GHWorkflowCleanAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func configure(_ window: NSWindow) {
-    window.minSize = NSSize(width: 960, height: 760)
-    window.setContentSize(NSSize(width: 1320, height: 860))
+    let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame
+      ?? NSRect(x: 0, y: 0, width: 1600, height: 920)
+    let targetSize = idealWindowSize(for: visibleFrame.size)
+    let targetOrigin = NSPoint(
+      x: visibleFrame.origin.x + ((visibleFrame.width - targetSize.width) / 2),
+      y: visibleFrame.origin.y + ((visibleFrame.height - targetSize.height) / 2)
+    )
+
+    window.minSize = NSSize(width: 720, height: 620)
+    window.setFrame(NSRect(origin: targetOrigin, size: targetSize), display: true)
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.toolbarStyle = .unified
     window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.06, blue: 0.10, alpha: 1)
     window.isMovableByWindowBackground = false
-    window.center()
+    window.tabbingMode = .disallowed
+  }
+
+  private func idealWindowSize(for screenSize: NSSize) -> NSSize {
+    let widthRatio: CGFloat
+    let heightRatio: CGFloat
+
+    switch screenSize.width {
+    case ..<900:
+      widthRatio = 0.98
+      heightRatio = 0.94
+    case ..<1280:
+      widthRatio = 0.96
+      heightRatio = 0.92
+    case ..<1800:
+      widthRatio = 0.92
+      heightRatio = 0.90
+    case ..<2600:
+      widthRatio = 0.90
+      heightRatio = 0.90
+    default:
+      widthRatio = 0.88
+      heightRatio = 0.90
+    }
+
+    let width = min(max(screenSize.width * widthRatio, 720), 2440)
+    let height = min(max(screenSize.height * heightRatio, 620), 1440)
+    return NSSize(width: width, height: height)
   }
 }
