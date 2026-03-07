@@ -3,7 +3,9 @@
 set -uo pipefail
 
 APP_NAME="gh-actions-cleanup"
-VERSION="1.2.1"
+VERSION="0.0.1"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/GH Workflow Clean"
+LAST_SESSION_FILE="$APP_SUPPORT_DIR/last-session.env"
 
 HOST=""
 ACCOUNT=""
@@ -22,9 +24,13 @@ DRY_RUN=0
 NO_COLOR=0
 RUN_FILTER=""
 TARGET_RUN_ID=""
+GUIDED_MENU_MODE=0
 
 ORIGINAL_ACCOUNT=""
 SWITCHED_ACCOUNT=0
+LAST_HOST=""
+LAST_ACCOUNT=""
+LAST_REPO_SPEC=""
 
 C_RESET=""
 C_RED=""
@@ -88,6 +94,81 @@ cleanup_on_exit() {
   exit "$exit_code"
 }
 
+show_wtl_banner() {
+  printf "%s\n" "$C_BOLD$C_BLUE"
+  cat <<'EOF'
+ __        __  _______   _
+ \ \      / / |__   __| | |
+  \ \ /\ / /     | |    | |
+   \ V  V /      | |    | |___
+    \_/\_/       |_|    |_____|
+
+ W.T.L. GH Workflow Clean
+ Production GitHub Actions Cleanup for macOS
+EOF
+  printf "%s" "$C_RESET"
+}
+
+pause_for_enter() {
+  local unused=""
+  read -r -p "Press Enter to continue... " unused
+}
+
+show_install_command() {
+  cat <<'EOF'
+One-line install for macOS:
+
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/WayneTechLab/GH-Workflow-Clean/main/install.sh)"
+EOF
+}
+
+load_last_session() {
+  local line=""
+  local key=""
+  local value=""
+
+  [[ -f "$LAST_SESSION_FILE" ]] || return 0
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    case "$key" in
+      HOST) LAST_HOST="$value" ;;
+      ACCOUNT) LAST_ACCOUNT="$value" ;;
+      REPO) LAST_REPO_SPEC="$value" ;;
+    esac
+  done <"$LAST_SESSION_FILE"
+}
+
+save_last_session() {
+  local previous_umask=""
+
+  [[ -n "$HOST" && -n "$ACCOUNT" && -n "$OWNER" && -n "$REPO_NAME" ]] || return 0
+
+  mkdir -p "$APP_SUPPORT_DIR"
+  chmod 700 "$APP_SUPPORT_DIR" >/dev/null 2>&1 || true
+
+  previous_umask="$(umask)"
+  umask 077
+  cat >"$LAST_SESSION_FILE" <<EOF
+HOST=$HOST
+ACCOUNT=$ACCOUNT
+REPO=$HOST/$OWNER/$REPO_NAME
+EOF
+  umask "$previous_umask"
+}
+
+show_last_session() {
+  [[ -n "$LAST_HOST$LAST_ACCOUNT$LAST_REPO_SPEC" ]] || return 0
+
+  printf "%sLast session%s\n" "$C_BOLD" "$C_RESET"
+  [[ -n "$LAST_HOST" ]] && printf "  Host: %s\n" "$LAST_HOST"
+  [[ -n "$LAST_ACCOUNT" ]] && printf "  Account: %s\n" "$LAST_ACCOUNT"
+  [[ -n "$LAST_REPO_SPEC" ]] && printf "  Repo: %s\n" "${LAST_REPO_SPEC#*/}"
+  printf "\n"
+}
+
 usage() {
   cat <<EOF
 ${APP_NAME} ${VERSION}
@@ -100,8 +181,7 @@ Usage:
 Options:
   --host HOST               GitHub host, for example github.com
   --account USER            GitHub account to switch to on the selected host
-  --repo OWNER/REPO         Repository to clean up
-  --repo HOST/OWNER/REPO    Repository with explicit host
+  --repo TARGET             Repository to clean up as OWNER/REPO, HOST/OWNER/REPO, or full GitHub URL
   --disable-workflows       Disable all workflows in the repository
   --delete-runs             Delete all workflow runs
   --run TARGET              Delete one specific workflow run by numeric ID or GitHub run URL
@@ -256,10 +336,66 @@ choose_from_list() {
   done
 }
 
+show_start_menu() {
+  local selected=""
+
+  while true; do
+    clear >/dev/null 2>&1 || true
+    show_wtl_banner
+    printf "\n"
+    show_last_session
+    selected="$(choose_from_list "Main Menu" \
+      "Guided cleanup" \
+      "Check GitHub login status" \
+      "Show one-line installer" \
+      "Exit")"
+
+    case "$selected" in
+      "Guided cleanup")
+        GUIDED_MENU_MODE=1
+        return 0
+        ;;
+      "Check GitHub login status")
+        printf "\n"
+        gh auth status 2>&1 || true
+        printf "\n"
+        pause_for_enter
+        ;;
+      "Show one-line installer")
+        printf "\n"
+        show_install_command
+        printf "\n"
+        pause_for_enter
+        ;;
+      "Exit")
+        exit 0
+        ;;
+    esac
+  done
+}
+
 parse_repo_input() {
   local input="$1"
 
-  if [[ "$input" == */*/* ]]; then
+  input="${input%/}"
+  input="${input#/}"
+
+  if [[ "$input" =~ ^https?://([^/]+)/([^/]+)/([^/]+)/?$ ]]; then
+    HOST="${BASH_REMATCH[1]}"
+    OWNER="${BASH_REMATCH[2]}"
+    REPO_NAME="${BASH_REMATCH[3]}"
+    REPO_NAME="${REPO_NAME%.git}"
+    return 0
+  fi
+
+  if [[ "$input" =~ ^git@([^:]+):([^/]+)/([^/]+)\.git$ ]]; then
+    HOST="${BASH_REMATCH[1]}"
+    OWNER="${BASH_REMATCH[2]}"
+    REPO_NAME="${BASH_REMATCH[3]}"
+    return 0
+  fi
+
+  if [[ "$input" == */*/* && -n "${input%%/*}" ]]; then
     HOST="${input%%/*}"
     input="${input#*/}"
   fi
@@ -268,6 +404,7 @@ parse_repo_input() {
 
   OWNER="${input%%/*}"
   REPO_NAME="${input##*/}"
+  REPO_NAME="${REPO_NAME%.git}"
 }
 
 gh_config_file() {
@@ -385,17 +522,13 @@ ensure_auth_for_host() {
     return 0
   fi
 
-  warn "No authenticated GitHub account found for $host."
-  if confirm "Run gh auth login for $host now?" Y; then
-    gh auth login --hostname "$host" || die "GitHub login failed for $host"
-  else
-    die "Authentication is required before cleanup can continue."
-  fi
+  die "No authenticated GitHub account found for $host. Login first with: gh auth login -h $host"
 }
 
 select_host() {
   local -a hosts=()
   local line=""
+  local default_host=""
 
   if [[ -n "$HOST" ]]; then
     ensure_auth_for_host "$HOST"
@@ -405,6 +538,17 @@ select_host() {
   while IFS= read -r line; do
     [[ -n "$line" ]] && hosts+=("$line")
   done < <(load_hosts)
+
+  if [[ "$GUIDED_MENU_MODE" -eq 1 ]]; then
+    default_host="${LAST_HOST:-github.com}"
+    if [[ "${#hosts[@]}" -eq 1 ]]; then
+      default_host="${hosts[0]}"
+    fi
+    HOST="$(prompt_nonempty "GitHub host" "$default_host")"
+    ensure_auth_for_host "$HOST"
+    info "Using GitHub host $HOST"
+    return 0
+  fi
 
   if [[ "${#hosts[@]}" -eq 0 ]]; then
     HOST="$(prompt_nonempty "GitHub host" "github.com")"
@@ -466,16 +610,10 @@ select_account() {
         return 0
       fi
     done
-    warn "Authenticated account $ACCOUNT was not found on $HOST."
-    if confirm "Authenticate another account on $HOST now?" Y; then
-      gh auth login --hostname "$HOST" || die "GitHub login failed for $HOST"
-      select_account
-      return 0
-    fi
-    die "Requested account is not available on $HOST"
+    die "Authenticated account $ACCOUNT was not found on $HOST. Login first with: gh auth login -h $HOST"
   fi
 
-  if [[ "${#lines[@]}" -eq 1 ]]; then
+  if [[ "${#lines[@]}" -eq 1 && "$GUIDED_MENU_MODE" -eq 0 ]]; then
     IFS=$'\t' read -r ACCOUNT state <<<"${lines[0]}"
     info "Using GitHub account $ACCOUNT on $HOST"
     return 0
@@ -504,51 +642,60 @@ select_account() {
 }
 
 resolve_repo() {
+  local repo_input=""
+  local repo_default=""
+  local previous_host="$HOST"
+
   if [[ -n "$REPO_SPEC" ]]; then
     parse_repo_input "$REPO_SPEC"
   else
-    OWNER="$(prompt_nonempty "Repository owner or org" "${ACCOUNT}")"
-    REPO_NAME="$(prompt_nonempty "Repository name")"
+    if [[ -n "$LAST_REPO_SPEC" ]]; then
+      if [[ "${LAST_REPO_SPEC%%/*}" == "$HOST" ]]; then
+        repo_default="${LAST_REPO_SPEC#*/}"
+      else
+        repo_default="$LAST_REPO_SPEC"
+      fi
+    fi
+    repo_input="$(prompt_nonempty "GitHub repo (OWNER/REPO, HOST/OWNER/REPO, or https://HOST/OWNER/REPO)" "$repo_default")"
+    parse_repo_input "$repo_input"
   fi
 
   REPO_SPEC="${HOST}/${OWNER}/${REPO_NAME}"
+
+  if [[ -n "$previous_host" && -n "$HOST" && "$previous_host" != "$HOST" ]]; then
+    info "Repository target switched host to $HOST"
+  fi
+}
+
+verify_repo_access() {
   gh repo view "$REPO_SPEC" --json nameWithOwner >/dev/null 2>&1 || die "Cannot access repository $REPO_SPEC"
 }
 
 ensure_api_ready() {
   local status_output=""
-  local limit=""
   local remaining=""
   local reset=""
   local reset_local=""
   local auth_status_ok=1
+  local api_login=""
 
   if ! status_output="$(gh auth status --hostname "$HOST" 2>&1)"; then
     auth_status_ok=0
     warn "GitHub authentication for $ACCOUNT on $HOST is invalid or expired."
   fi
 
-  limit="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.limit' 2>/dev/null || printf "")"
+  api_login="$(gh api --hostname "$HOST" user --jq '.login' 2>/dev/null || printf "")"
+  if [[ -z "$api_login" ]]; then
+    [[ "$auth_status_ok" -eq 0 ]] && printf "%s\n" "$status_output" >&2
+    die "GitHub login is required for $HOST. Run 'gh auth login -h $HOST' and retry."
+  fi
+
   remaining="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.remaining' 2>/dev/null || printf "")"
   reset="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.reset' 2>/dev/null || printf "")"
 
   if [[ ! "$remaining" =~ ^[0-9]+$ ]]; then
-    if [[ "$auth_status_ok" -eq 0 && "$ASSUME_YES" -eq 0 ]] && confirm "Re-authenticate now with repo and workflow scopes?" Y; then
-      gh auth refresh --hostname "$HOST" --scopes repo,workflow || gh auth login --hostname "$HOST" || \
-        die "GitHub re-authentication failed for $HOST"
-      limit="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.limit' 2>/dev/null || printf "")"
-      remaining="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.remaining' 2>/dev/null || printf "")"
-      reset="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.reset' 2>/dev/null || printf "")"
-    fi
-
-    [[ "$remaining" =~ ^[0-9]+$ ]] || {
-      [[ "$auth_status_ok" -eq 0 ]] && printf "%s\n" "$status_output" >&2
-      die "GitHub API access failed for $HOST. Run 'gh auth refresh --hostname $HOST --scopes repo,workflow' or 'gh auth login --hostname $HOST' and retry."
-    }
-  fi
-
-  if [[ "$limit" =~ ^[0-9]+$ ]] && (( limit < 5000 )); then
-    die "GitHub API access for $HOST appears unauthenticated or under-scoped (core limit $limit). Run 'gh auth refresh --hostname $HOST --scopes repo,workflow' or 'gh auth login --hostname $HOST'."
+    [[ "$auth_status_ok" -eq 0 ]] && printf "%s\n" "$status_output" >&2
+    die "GitHub API access failed for $HOST. Run 'gh auth login -h $HOST' and retry."
   fi
 
   if [[ "$remaining" =~ ^[0-9]+$ ]] && (( remaining == 0 )); then
@@ -769,6 +916,7 @@ delete_runs() {
   local total=0
   local completed=0
   local failed=0
+  local already_gone=0
 
   if ! ids_output="$(collect_run_ids)"; then
     warn "Could not list workflow runs. Check GitHub API rate limits and token permissions."
@@ -805,6 +953,7 @@ delete_runs() {
     else
       case $? in
         2)
+          already_gone=$((already_gone + 1))
           if [[ -n "$TARGET_RUN_ID" ]]; then
             info "Workflow run $id is already gone."
           else
@@ -831,10 +980,14 @@ delete_runs() {
     success "Dry run complete for workflow runs"
     return 0
   elif [[ "$failed" -eq 0 ]]; then
-    success "Deleted $total workflow runs"
+    if [[ "$already_gone" -gt 0 ]]; then
+      success "Processed $total workflow runs ($((total - already_gone)) deleted, $already_gone already gone)"
+    else
+      success "Deleted $total workflow runs"
+    fi
     return 0
   else
-    warn "Deleted $((total - failed)) workflow runs, $failed failed"
+    warn "Processed $total workflow runs ($((total - failed - already_gone)) deleted, $already_gone already gone, $failed failed)"
     return 1
   fi
 }
@@ -1059,17 +1212,29 @@ parse_args() {
 
 main() {
   local cleanup_failed=0
+  local original_argc="$#"
 
   parse_args "$@"
   init_colors
+  load_last_session
   trap cleanup_on_exit EXIT
 
   require_command gh
 
+  if [[ "$original_argc" -eq 0 ]]; then
+    show_start_menu
+  fi
+
+  if [[ -n "$REPO_SPEC" ]]; then
+    parse_repo_input "$REPO_SPEC"
+  fi
+
   select_host
-  select_account
   resolve_repo
+  select_account
   ensure_api_ready
+  verify_repo_access
+  save_last_session
   select_actions
   resolve_target_run
   resolve_run_filter
