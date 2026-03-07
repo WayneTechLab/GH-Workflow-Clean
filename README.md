@@ -19,7 +19,7 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.2.2`
+Current release: `0.2.3`
 
 ## Warning
 
@@ -67,6 +67,7 @@ open "/Applications/GH Workflow Clean.app"
 - deletes artifacts
 - deletes caches
 - keeps the CLI as the cleanup engine under the native GUI
+- includes a native in-app multi-page menu for Help, Terms, Security, Brand, Project Info, and About
 - stores only the last host, account, and repo for convenience
 - does not store GitHub tokens
 - redacts common token and key patterns from the native app log panel

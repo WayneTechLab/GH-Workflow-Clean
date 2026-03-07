@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.2"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.3"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -108,6 +108,105 @@ enum StatusKind {
     }
   }
 }
+
+private enum AppDestination: String, CaseIterable, Identifiable {
+  case controlCenter
+  case helpCenter
+  case terms
+  case security
+  case brandSystem
+  case macOSNotes
+  case projectInfo
+  case about
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .controlCenter: return "Control Center"
+    case .helpCenter: return "Help Center"
+    case .terms: return "Terms of Service"
+    case .security: return "Security Notes"
+    case .brandSystem: return "Brand System"
+    case .macOSNotes: return "macOS App Notes"
+    case .projectInfo: return "Project Info"
+    case .about: return "About"
+    }
+  }
+
+  var subtitle: String {
+    switch self {
+    case .controlCenter:
+      return "Primary cleanup workspace for GitHub auth, repository targeting, safety, and execution."
+    case .helpCenter:
+      return "Operational guidance, safety model, target selection rules, and first-run workflow."
+    case .terms:
+      return "Every-launch responsibility, risk acceptance, and authorized-use conditions."
+    case .security:
+      return "Secret handling, token safety, stored-data scope, and review notes."
+    case .brandSystem:
+      return "Official logo, icon, color, and artwork usage requirements for production consistency."
+    case .macOSNotes:
+      return "Native app packaging, icon, installer, and macOS integration guidance."
+    case .projectInfo:
+      return "Bundle metadata, resource map, product identity, and project-level implementation notes."
+    case .about:
+      return "Product identity, company details, bundle state, install details, and local app storage."
+    }
+  }
+
+  var icon: String {
+    switch self {
+    case .controlCenter: return "switch.2"
+    case .helpCenter: return "questionmark.circle"
+    case .terms: return "checklist"
+    case .security: return "lock.shield"
+    case .brandSystem: return "paintpalette"
+    case .macOSNotes: return "laptopcomputer"
+    case .projectInfo: return "shippingbox"
+    case .about: return "info.circle"
+    }
+  }
+
+  var tint: Color {
+    switch self {
+    case .controlCenter: return DashboardTheme.accent
+    case .helpCenter: return DashboardTheme.success
+    case .terms: return DashboardTheme.warning
+    case .security: return DashboardTheme.deepBlue
+    case .brandSystem: return DashboardTheme.brightPink
+    case .macOSNotes: return DashboardTheme.accentPink
+    case .projectInfo: return DashboardTheme.success
+    case .about: return DashboardTheme.link
+    }
+  }
+
+  var bundleDocumentName: String? {
+    switch self {
+    case .helpCenter: return "Help-Center.md"
+    case .terms: return "TERMS-OF-SERVICE.md"
+    case .security: return "SECURITY.md"
+    case .brandSystem: return "Brand-System.md"
+    case .macOSNotes: return "macOS-App-Notes.md"
+    case .projectInfo: return "PROJECT-INFO.md"
+    case .controlCenter, .about: return nil
+    }
+  }
+
+  var fallbackDocumentText: String {
+    switch self {
+    case .terms:
+      return bundledTermsOfServiceText()
+    case .about:
+      return ""
+    default:
+      return "This bundled document is not currently available in the app package."
+    }
+  }
+}
+
+private let workspaceDestinations: [AppDestination] = [.controlCenter, .about]
+private let knowledgeDestinations: [AppDestination] = [.helpCenter, .terms, .security, .brandSystem, .macOSNotes, .projectInfo]
 
 @MainActor
 final class CleanupViewModel: ObservableObject {
@@ -1122,6 +1221,36 @@ private func bundledImage(named name: String) -> NSImage? {
   return NSImage(contentsOf: url)
 }
 
+private func bundledDocumentText(named name: String, fallback: String = "") -> String {
+  if let helpURL = bundledResourceURL(named: name, subdirectory: bundledHelpDirectory),
+     let contents = try? String(contentsOf: helpURL, encoding: .utf8),
+     contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+    return contents
+  }
+
+  if let directURL = bundledResourceURL(named: name),
+     let contents = try? String(contentsOf: directURL, encoding: .utf8),
+     contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+    return contents
+  }
+
+  return fallback
+}
+
+private func attributedMarkdown(_ markdown: String) -> AttributedString {
+  if let parsed = try? AttributedString(
+    markdown: markdown,
+    options: AttributedString.MarkdownParsingOptions(
+      interpretedSyntax: .full,
+      failurePolicy: .returnPartiallyParsedIfPossible
+    )
+  ) {
+    return parsed
+  }
+
+  return AttributedString(markdown)
+}
+
 private func redactSensitiveText(_ text: String) -> String {
   let replacements: [(pattern: String, replacement: String)] = [
     ("ghp_[A-Za-z0-9]{20,}", "[REDACTED_GITHUB_TOKEN]"),
@@ -1389,6 +1518,196 @@ struct DashboardShell<Content: View>: View {
         )
     )
     .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
+  }
+}
+
+private struct MenuSectionHeader: View {
+  let text: String
+
+  var body: some View {
+    Text(text.uppercased())
+      .font(.system(size: 11, weight: .bold, design: .rounded))
+      .foregroundStyle(DashboardTheme.subtle)
+  }
+}
+
+private struct DestinationMenuButton: View {
+  let destination: AppDestination
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 12) {
+        Image(systemName: destination.icon)
+          .font(.system(size: 14, weight: .bold))
+          .foregroundStyle(isSelected ? DashboardTheme.text : destination.tint)
+          .frame(width: 20)
+
+        VStack(alignment: .leading, spacing: 3) {
+          Text(destination.title)
+            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .foregroundStyle(DashboardTheme.text)
+
+          Text(destination.subtitle)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(isSelected ? DashboardTheme.coolWhite.opacity(0.82) : DashboardTheme.muted)
+            .lineLimit(2)
+        }
+
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .background(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(isSelected ? destination.tint.opacity(0.42) : DashboardTheme.field)
+          .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .stroke(isSelected ? destination.tint.opacity(0.65) : DashboardTheme.border, lineWidth: 1)
+          )
+      )
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+private struct CompactDestinationBar: View {
+  let selection: AppDestination
+  let onSelect: (AppDestination) -> Void
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 10) {
+        ForEach(AppDestination.allCases) { destination in
+          Button(action: { onSelect(destination) }) {
+            HStack(spacing: 8) {
+              Image(systemName: destination.icon)
+                .font(.system(size: 12, weight: .bold))
+              Text(destination.title)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(selection == destination ? DashboardTheme.text : DashboardTheme.muted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+              Capsule()
+                .fill(selection == destination ? destination.tint.opacity(0.42) : DashboardTheme.field)
+                .overlay(
+                  Capsule()
+                    .stroke(selection == destination ? destination.tint.opacity(0.65) : DashboardTheme.border, lineWidth: 1)
+                )
+            )
+          }
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(.horizontal, 4)
+    }
+  }
+}
+
+private struct AppSidebarMenu: View {
+  let selection: AppDestination
+  let onSelect: (AppDestination) -> Void
+
+  var body: some View {
+    PanelCard(title: "App Menu", subtitle: "Move between the cleanup workspace and bundled in-app reference pages.", compact: true) {
+      VStack(alignment: .leading, spacing: 12) {
+        MenuSectionHeader(text: "Workspace")
+        ForEach(workspaceDestinations) { destination in
+          DestinationMenuButton(destination: destination, isSelected: selection == destination) {
+            onSelect(destination)
+          }
+        }
+
+        Divider().overlay(DashboardTheme.border)
+
+        MenuSectionHeader(text: "Knowledge Base")
+        ForEach(knowledgeDestinations) { destination in
+          DestinationMenuButton(destination: destination, isSelected: selection == destination) {
+            onSelect(destination)
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct DocumentReaderCard: View {
+  let destination: AppDestination
+  let markdown: String
+
+  var body: some View {
+    PanelCard(title: destination.title, subtitle: destination.subtitle) {
+      BannerCard(
+        title: destination.title,
+        detail: "This page is bundled inside the native app and stays available without leaving the interface.",
+        kind: .ready
+      )
+
+      Text(attributedMarkdown(markdown))
+        .font(.system(size: 14, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.text)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+        .lineSpacing(4)
+        .padding(18)
+        .background(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(DashboardTheme.panelStrong)
+            .overlay(
+              RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(DashboardTheme.border, lineWidth: 1)
+            )
+        )
+    }
+  }
+}
+
+private struct DestinationShortcutTile: View {
+  let destination: AppDestination
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      VStack(alignment: .leading, spacing: 10) {
+        HStack {
+          Image(systemName: destination.icon)
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(isSelected ? DashboardTheme.text : destination.tint)
+          Spacer(minLength: 0)
+          if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+              .font(.system(size: 14, weight: .bold))
+              .foregroundStyle(destination.tint)
+          }
+        }
+
+        Text(destination.title)
+          .font(.system(size: 14, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
+          .multilineTextAlignment(.leading)
+
+        Text(destination.subtitle)
+          .font(.system(size: 11, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.muted)
+          .lineLimit(3)
+          .multilineTextAlignment(.leading)
+      }
+      .padding(14)
+      .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+      .background(
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+          .fill(isSelected ? destination.tint.opacity(0.18) : DashboardTheme.field)
+          .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .stroke(isSelected ? destination.tint.opacity(0.55) : DashboardTheme.border, lineWidth: 1)
+          )
+      )
+    }
+    .buttonStyle(.plain)
   }
 }
 
@@ -1683,6 +2002,7 @@ struct LogConsoleView: NSViewRepresentable {
 
 struct ContentView: View {
   @StateObject private var model = CleanupViewModel()
+  @State private var selectedDestination: AppDestination = .controlCenter
   @State private var showLaunchWarning = true
   @State private var acceptedRisk = false
   @State private var acceptedPurpose = false
@@ -1691,7 +2011,8 @@ struct ContentView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let contentWidth = max(geometry.size.width - 32, 640)
+      let useSidebarMenu = geometry.size.width >= 1380
+      let detailWidth = max(geometry.size.width - (useSidebarMenu ? 360 : 32), 680)
 
       ZStack {
         LinearGradient(
@@ -1701,21 +2022,29 @@ struct ContentView: View {
         )
         .ignoresSafeArea()
 
-        ScrollView {
-          VStack(spacing: 18) {
-            DashboardShell {
-              HeaderPanel(
-                brandMark: model.bundledBrandMark,
-                compact: contentWidth < 1280
-              )
+        Group {
+          if useSidebarMenu {
+            HStack(alignment: .top, spacing: 18) {
+              AppSidebarMenu(selection: selectedDestination) { destination in
+                selectedDestination = destination
+              }
+              .frame(width: 320)
 
-              dashboardLayout(for: contentWidth)
+              pageContainer(for: detailWidth)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
           }
-          .padding(16)
-          .frame(maxWidth: 3200)
-          .frame(maxWidth: .infinity)
+          else {
+            VStack(spacing: 16) {
+              CompactDestinationBar(selection: selectedDestination) { destination in
+                selectedDestination = destination
+              }
+
+              pageContainer(for: detailWidth)
+            }
+          }
         }
+        .padding(16)
       }
     }
     .frame(minWidth: 760, minHeight: 640)
@@ -1738,6 +2067,114 @@ struct ContentView: View {
   }
 
   @ViewBuilder
+  private func pageContainer(for width: CGFloat) -> some View {
+    ScrollView {
+      VStack(spacing: 18) {
+        switch selectedDestination {
+        case .controlCenter:
+          controlCenterPage(for: width)
+        case .about:
+          aboutPage
+        case .helpCenter, .terms, .security, .brandSystem, .macOSNotes, .projectInfo:
+          documentPage(for: selectedDestination)
+        }
+      }
+      .frame(maxWidth: 3200)
+      .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+  }
+
+  private func controlCenterPage(for width: CGFloat) -> some View {
+    DashboardShell {
+      HeaderPanel(
+        brandMark: model.bundledBrandMark,
+        compact: width < 1280
+      )
+
+      dashboardLayout(for: width)
+    }
+  }
+
+  private func documentPage(for destination: AppDestination) -> some View {
+    let markdown = bundledDocumentText(
+      named: destination.bundleDocumentName ?? "",
+      fallback: destination.fallbackDocumentText
+    )
+
+    return DashboardShell {
+      HeaderPanel(
+        brandMark: model.bundledBrandMark,
+        compact: false
+      )
+
+      DocumentReaderCard(destination: destination, markdown: markdown)
+    }
+  }
+
+  private var aboutPage: some View {
+    DashboardShell {
+      HeaderPanel(
+        brandMark: model.bundledBrandMark,
+        compact: false
+      )
+
+      PanelCard(title: "About GH Workflow Clean", subtitle: "Product identity, bundle metadata, local storage path, and utility actions without leaving the app shell.") {
+        BannerCard(
+          title: "Native macOS Cleanup Console",
+          detail: "\(model.bundleIdentitySummary)\nProvided by \(companyName) · \(companyWebsite)",
+          kind: .ready
+        )
+
+        if let brandMark = model.bundledBrandMark {
+          HStack(alignment: .center, spacing: 16) {
+            BrandMarkSquareView(image: brandMark, size: 120, cornerRadius: 24)
+
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Official press-kit artwork loaded")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundStyle(DashboardTheme.text)
+
+              Text("This screen stays inside the native app. Use the left-side menu or the compact top menu to move between Help, Terms, Security, Brand, and project pages without external file popups.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(DashboardTheme.muted)
+                .lineSpacing(3)
+            }
+
+            Spacer(minLength: 0)
+          }
+          .padding(16)
+          .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .fill(DashboardTheme.panelStrong)
+              .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                  .stroke(DashboardTheme.border, lineWidth: 1)
+              )
+          )
+        }
+
+        FixedValueRow(label: "App Version", value: appVersion)
+        FixedValueRow(label: "Bundle ID", value: Bundle.main.bundleIdentifier ?? "com.waynetechlab.ghworkflowclean")
+        FixedValueRow(label: "Company", value: companyName)
+        FixedValueRow(label: "Website", value: companyWebsite)
+        FixedValueRow(label: "Local Session Storage", value: appSupportDir)
+
+        HStack(spacing: 10) {
+          Button("Open Website") {
+            model.openCompanyWebsite()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: true))
+
+          Button("Reveal Session Storage") {
+            model.revealSessionStorage()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+        }
+      }
+    }
+  }
+
+  @ViewBuilder
   private func dashboardLayout(for width: CGFloat) -> some View {
     if width >= 2100 {
       HStack(alignment: .top, spacing: 18) {
@@ -1750,7 +2187,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
           cleanupPanel
           executionPanel
-          supportPanel
+          libraryPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -1768,7 +2205,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
           cleanupPanel
           executionPanel
-          supportPanel
+          libraryPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -1784,7 +2221,7 @@ struct ContentView: View {
           VStack(alignment: .leading, spacing: 18) {
             cleanupPanel
             executionPanel
-            supportPanel
+            libraryPanel
           }
           .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -1798,7 +2235,7 @@ struct ContentView: View {
         repositoryPanel
         cleanupPanel
         executionPanel
-        supportPanel
+        libraryPanel
         logPanel(minHeight: 320)
       }
     }
@@ -2063,94 +2500,26 @@ struct ContentView: View {
     }
   }
 
-  private var supportPanel: some View {
-    PanelCard(title: "Help & Project Info", subtitle: "Bundled support docs, brand references, and production metadata.") {
+  private var libraryPanel: some View {
+    PanelCard(title: "In-App Pages", subtitle: "Navigate to Help, Terms, Security, Brand, project notes, and About without leaving the app window.") {
       BannerCard(
-        title: "Production Bundle Ready",
-        detail: "\(model.bundleIdentitySummary)\nApp help files and brand assets are bundled inside the native app package.",
+        title: selectedDestination == .controlCenter ? "Control Center Active" : "\(selectedDestination.title) Active",
+        detail: "Use the app menu to move between bundled pages. Documentation and product info now live inside the native interface instead of opening external markdown windows.",
         kind: .ready
       )
 
-      if let brandMark = model.bundledBrandMark {
-        HStack(alignment: .center, spacing: 14) {
-          Image(nsImage: brandMark)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 58, height: 58)
-
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Exact master artwork loaded")
-              .font(.system(size: 14, weight: .bold, design: .rounded))
-              .foregroundStyle(DashboardTheme.text)
-
-            Text("The native app is using the official press-kit logo pack, AppIcon set, and brand docs.")
-              .font(.system(size: 12, weight: .medium, design: .rounded))
-              .foregroundStyle(DashboardTheme.muted)
-              .lineSpacing(2)
+      LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 10)], spacing: 10) {
+        ForEach(knowledgeDestinations + [.about]) { destination in
+          DestinationShortcutTile(
+            destination: destination,
+            isSelected: selectedDestination == destination
+          ) {
+            selectedDestination = destination
           }
-
-          Spacer(minLength: 0)
         }
-        .padding(14)
-        .background(
-          RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(DashboardTheme.panelStrong)
-            .overlay(
-              RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(DashboardTheme.border, lineWidth: 1)
-            )
-        )
       }
 
-      LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
-        Button("Open Help Center") {
-          model.openBundledHelpDocument("Help-Center.md")
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
-
-        Button("Open Terms") {
-          model.openBundledHelpDocument("TERMS-OF-SERVICE.md")
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
-
-        Button("Open Security Notes") {
-          model.openBundledHelpDocument("SECURITY.md")
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: true))
-
-        Button("Open Brand System") {
-          model.openBundledHelpDocument("Brand-System.md")
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.brightPink, bordered: true))
-
-        Button("Open macOS App Notes") {
-          model.openBundledHelpDocument("macOS-App-Notes.md")
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: true))
-
-        Button("Open Project Info") {
-          model.openBundledHelpDocument("PROJECT-INFO.md")
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accentPink, bordered: true))
-
-        Button("Open Website") {
-          model.openCompanyWebsite()
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: true))
-
-        Button("Reveal Session Storage") {
-          model.revealSessionStorage()
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
-
-        Button("Reveal Bundled Help") {
-          model.revealBundledHelpDirectory()
-        }
-        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: true))
-      }
-
-      Text("Use the bundled help files for onboarding, legal review, macOS packaging notes, and brand consistency. The Xcode-ready assets live under macos/Assets.xcassets in the repo.")
+      Text("The app now uses a native multi-page menu system. Help, legal, security, brand, and project pages stay inside the product instead of opening external document windows.")
         .font(.system(size: 12, weight: .medium, design: .rounded))
         .foregroundStyle(DashboardTheme.muted)
         .lineSpacing(2)
