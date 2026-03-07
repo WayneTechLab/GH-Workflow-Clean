@@ -58,11 +58,20 @@ final class CleanupViewModel: ObservableObject {
       if host != oldValue {
         reloadAccountChoices()
         refreshAuthStatus()
+        if host != oldValue {
+          safetyArmEnabled = false
+        }
       }
     }
   }
   @Published var account = ""
-  @Published var repoTarget = ""
+  @Published var repoTarget = "" {
+    didSet {
+      if repoTarget != oldValue {
+        safetyArmEnabled = false
+      }
+    }
+  }
   @Published var fullCleanup = true
   @Published var disableWorkflows = true
   @Published var deleteRuns = true
@@ -71,6 +80,7 @@ final class CleanupViewModel: ObservableObject {
   @Published var dryRun = false
   @Published var runTarget = ""
   @Published var runFilter = ""
+  @Published var safetyArmEnabled = false
 
   @Published var availableHosts: [String] = []
   @Published var availableAccounts: [String] = []
@@ -79,6 +89,8 @@ final class CleanupViewModel: ObservableObject {
   @Published var statusDetail = "Loading local GitHub configuration."
   @Published var statusKind: StatusKind = .running
   @Published var isRunning = false
+  @Published var isAuthenticated = false
+  @Published var isLoggingOut = false
 
   private var hostConfigs: [AuthHostConfig] = []
   private var runningProcess: Process?
@@ -126,11 +138,40 @@ final class CleanupViewModel: ObservableObject {
     !isRunning &&
       cliPath != nil &&
       ghPath != nil &&
+      isAuthenticated &&
       !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
       !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
       !repoTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
       (fullCleanup || disableWorkflows || deleteRuns || deleteArtifacts || deleteCaches) &&
+      safetyArmEnabled &&
       statusKind != .error
+  }
+
+  var selectedHostConfig: AuthHostConfig? {
+    hostConfigs.first(where: { $0.host == host.trimmingCharacters(in: .whitespacesAndNewlines) })
+  }
+
+  var authHeadline: String {
+    let selectedHost = host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "github.com" : host.trimmingCharacters(in: .whitespacesAndNewlines)
+    if isAuthenticated {
+      return "GH TOKEN LOGGED IN @ \(selectedHost)"
+    }
+    return "GH TOKEN NOT LOGGED IN @ \(selectedHost)"
+  }
+
+  var authSummary: String {
+    let resolvedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+    if isAuthenticated && !resolvedAccount.isEmpty {
+      return "User \(resolvedAccount) on account \(resolvedAccount) ready."
+    }
+    return "No authenticated GitHub account is ready for cleanup."
+  }
+
+  var authActionHint: String {
+    if isAuthenticated {
+      return "Selected account is ready. You can refresh, log out, or continue to repository cleanup."
+    }
+    return "Log in with GitHub CLI first, then select the account you want to use."
   }
 
   var lastSessionSummary: String? {
@@ -209,6 +250,7 @@ final class CleanupViewModel: ObservableObject {
 
   func refreshAuthStatus() {
     guard let ghPath else {
+      isAuthenticated = false
       statusKind = .error
       statusTitle = "GitHub CLI Missing"
       statusDetail = "Install GitHub CLI first. The GUI and CLI both depend on gh."
@@ -217,6 +259,7 @@ final class CleanupViewModel: ObservableObject {
 
     let selectedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !selectedHost.isEmpty else {
+      isAuthenticated = false
       statusKind = .warning
       statusTitle = "GitHub Host Required"
       statusDetail = "Enter a GitHub host, then refresh login status."
@@ -239,15 +282,18 @@ final class CleanupViewModel: ObservableObject {
       DispatchQueue.main.async {
         self.reloadAuthInventory()
         let cleaned = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedAccount = self.account.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.status == 0 {
+          self.isAuthenticated = !resolvedAccount.isEmpty || self.selectedHostConfig?.activeUser != nil
           self.statusKind = .ready
-          self.statusTitle = "GitHub Login Ready"
+          self.statusTitle = "GH TOKEN LOGGED IN @ \(selectedHost)"
           self.statusDetail = cleaned.isEmpty
-            ? "Authenticated for \(selectedHost)."
-            : cleaned
+            ? "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready."
+            : "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready.\n\(cleaned)"
         } else {
+          self.isAuthenticated = false
           self.statusKind = .warning
-          self.statusTitle = "Login Required"
+          self.statusTitle = "GH TOKEN NOT LOGGED IN @ \(selectedHost)"
           self.statusDetail = cleaned.isEmpty
             ? "Run gh auth login -h \(selectedHost) before cleanup."
             : cleaned
@@ -302,6 +348,49 @@ final class CleanupViewModel: ObservableObject {
     runningProcess?.terminate()
   }
 
+  func logoutSelectedAccount() {
+    guard let ghPath else {
+      statusKind = .error
+      statusTitle = "GitHub CLI Missing"
+      statusDetail = "Install GitHub CLI first."
+      return
+    }
+
+    let selectedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+    let selectedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !selectedHost.isEmpty, !selectedAccount.isEmpty else {
+      statusKind = .warning
+      statusTitle = "No Account Selected"
+      statusDetail = "Choose an authenticated account before logging out."
+      return
+    }
+
+    isLoggingOut = true
+    appendLog("[gui] Logging out \(selectedAccount) on \(selectedHost)\n")
+
+    let environment = baseEnvironment()
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      guard let self else { return }
+      let result = Self.runCommand(
+        executable: ghPath,
+        arguments: ["auth", "logout", "--hostname", selectedHost, "--user", selectedAccount],
+        environment: environment,
+        stdin: "y\n"
+      )
+
+      DispatchQueue.main.async {
+        self.isLoggingOut = false
+        let cleaned = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleaned.isEmpty {
+          self.appendLog(cleaned + "\n")
+        }
+        self.safetyArmEnabled = false
+        self.reloadAuthInventory()
+        self.refreshAuthStatus()
+      }
+    }
+  }
+
   func runCleanup() {
     guard let cliPath else {
       statusKind = .error
@@ -351,6 +440,13 @@ final class CleanupViewModel: ObservableObject {
       statusKind = .warning
       statusTitle = "Cleanup Action Required"
       statusDetail = "Choose at least one cleanup action or enable full cleanup."
+      return
+    }
+
+    guard safetyArmEnabled else {
+      statusKind = .warning
+      statusTitle = "Safety Lock Enabled"
+      statusDetail = "Turn on the permanent delete confirmation switch before running cleanup."
       return
     }
 
@@ -425,11 +521,13 @@ final class CleanupViewModel: ObservableObject {
         self.runningProcess = nil
 
         if terminated.terminationStatus == 0 {
+          self.safetyArmEnabled = false
           self.statusKind = .ready
           self.statusTitle = self.dryRun ? "Dry Run Finished" : "Cleanup Finished"
           self.statusDetail = "The CLI completed successfully."
           self.reloadAuthInventory()
         } else {
+          self.safetyArmEnabled = false
           self.statusKind = .error
           self.statusTitle = "Cleanup Failed"
           self.statusDetail = "The CLI exited with code \(terminated.terminationStatus). Review the log output."
@@ -577,20 +675,29 @@ final class CleanupViewModel: ObservableObject {
     }
   }
 
-  private nonisolated static func runCommand(executable: String, arguments: [String], environment: [String: String]) -> CommandResult {
+  private nonisolated static func runCommand(executable: String, arguments: [String], environment: [String: String], stdin: String? = nil) -> CommandResult {
     let process = Process()
     let pipe = Pipe()
+    let stdinPipe = Pipe()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = arguments
     process.environment = environment
     process.standardOutput = pipe
     process.standardError = pipe
+    process.standardInput = stdinPipe
 
     do {
       try process.run()
     } catch {
       return CommandResult(status: 1, output: error.localizedDescription)
     }
+
+    if let stdin {
+      if let data = stdin.data(using: .utf8) {
+        stdinPipe.fileHandleForWriting.write(data)
+      }
+    }
+    stdinPipe.fileHandleForWriting.closeFile()
 
     process.waitUntilExit()
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -706,11 +813,13 @@ struct StatusCard: View {
 
       VStack(alignment: .leading, spacing: 6) {
         Text(title)
-          .font(.system(size: 16, weight: .bold, design: .rounded))
+          .font(.system(size: 18, weight: .bold, design: .rounded))
+          .foregroundStyle(Color.primary)
 
         Text(detail)
-          .font(.system(size: 12, weight: .medium, design: .rounded))
-          .foregroundStyle(.secondary)
+          .font(.system(size: 13, weight: .medium, design: .rounded))
+          .foregroundStyle(Color.primary.opacity(0.88))
+          .lineSpacing(3)
       }
 
       Spacer(minLength: 0)
@@ -722,6 +831,80 @@ struct StatusCard: View {
         .overlay(
           RoundedRectangle(cornerRadius: 20, style: .continuous)
             .stroke(kind.tint.opacity(0.24), lineWidth: 1)
+        )
+    )
+  }
+}
+
+struct FixedValueRow: View {
+  let label: String
+  let value: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(label)
+        .font(.system(size: 12, weight: .semibold, design: .rounded))
+        .foregroundStyle(.secondary)
+
+      Text(value)
+        .font(.system(size: 14, weight: .semibold, design: .rounded))
+        .foregroundStyle(Color.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(nsColor: .textBackgroundColor))
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+        )
+    }
+  }
+}
+
+struct SafetyCard: View {
+  @Binding var isArmed: Bool
+  let dryRun: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      HStack(alignment: .center, spacing: 12) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .font(.system(size: 18, weight: .bold))
+          .foregroundStyle(Color.white)
+          .frame(width: 34, height: 34)
+          .background(Color(red: 0.82, green: 0.19, blue: 0.13))
+          .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Caution")
+            .font(.system(size: 18, weight: .bold, design: .rounded))
+            .foregroundStyle(Color.primary)
+
+          Text(dryRun ? "Dry run is safe, but this tool is built for permanent deletion. Check your target before you continue." : "Warning: this will permanently delete GitHub Actions data. There is no undo.")
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(Color.primary.opacity(0.88))
+            .lineSpacing(3)
+        }
+      }
+
+      Toggle("I understand this can permanently delete GitHub Actions data", isOn: $isArmed)
+        .toggleStyle(.switch)
+        .font(.system(size: 13, weight: .semibold, design: .rounded))
+
+      Text("The run button stays locked until this switch is turned on.")
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .foregroundStyle(.secondary)
+    }
+    .padding(18)
+    .background(
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .fill(Color(red: 1.0, green: 0.96, blue: 0.93))
+        .overlay(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(Color(red: 0.90, green: 0.52, blue: 0.28), lineWidth: 1)
         )
     )
   }
@@ -766,44 +949,48 @@ struct ContentView: View {
           VStack(alignment: .leading, spacing: 22) {
             SectionCard(title: "Connection", subtitle: "Select the GitHub host and authenticated account.") {
               VStack(alignment: .leading, spacing: 14) {
-                Text("GitHub Host")
-                  .font(.system(size: 12, weight: .semibold, design: .rounded))
-                  .foregroundStyle(.secondary)
+                StatusCard(title: model.authHeadline, detail: "\(model.authSummary)\n\(model.authActionHint)", kind: model.isAuthenticated ? .ready : .warning)
 
-                HStack(spacing: 12) {
-                  Picker("Host", selection: $model.host) {
-                    ForEach(model.availableHosts, id: \.self) { host in
-                      Text(host).tag(host)
+                if model.availableHosts.count > 1 {
+                  VStack(alignment: .leading, spacing: 6) {
+                    Text("Detected GitHub Hosts")
+                      .font(.system(size: 12, weight: .semibold, design: .rounded))
+                      .foregroundStyle(.secondary)
+                    Picker("Host", selection: $model.host) {
+                      ForEach(model.availableHosts, id: \.self) { host in
+                        Text(host).tag(host)
+                      }
                     }
-                    if model.availableHosts.contains(model.host) == false {
-                      Text(model.host).tag(model.host)
-                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 240)
                   }
-                  .pickerStyle(.menu)
-                  .frame(width: 220)
+                }
 
+                VStack(alignment: .leading, spacing: 6) {
+                  Text("GitHub Host")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
                   TextField("github.com", text: $model.host)
                     .textFieldStyle(.roundedBorder)
                 }
 
-                Text("Account")
-                  .font(.system(size: 12, weight: .semibold, design: .rounded))
-                  .foregroundStyle(.secondary)
-
-                if model.availableAccounts.isEmpty {
-                  TextField("Authenticated account", text: $model.account)
-                    .textFieldStyle(.roundedBorder)
-                } else {
-                  Picker("Account", selection: $model.account) {
-                    ForEach(model.availableAccounts, id: \.self) { account in
-                      Text(account).tag(account)
+                if model.availableAccounts.count > 1 {
+                  VStack(alignment: .leading, spacing: 6) {
+                    Text("Authenticated Account")
+                      .font(.system(size: 12, weight: .semibold, design: .rounded))
+                      .foregroundStyle(.secondary)
+                    Picker("Account", selection: $model.account) {
+                      ForEach(model.availableAccounts, id: \.self) { account in
+                        Text(account).tag(account)
+                      }
                     }
-                    if model.availableAccounts.contains(model.account) == false, !model.account.isEmpty {
-                      Text(model.account).tag(model.account)
-                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 280)
                   }
-                  .pickerStyle(.menu)
-                  .frame(width: 260)
+                } else if let onlyAccount = model.availableAccounts.first {
+                  FixedValueRow(label: "Authenticated Account", value: onlyAccount)
+                } else {
+                  FixedValueRow(label: "Authenticated Account", value: "No GitHub account logged in for this host")
                 }
 
                 HStack(spacing: 10) {
@@ -811,9 +998,14 @@ struct ContentView: View {
                     model.refreshAuthStatus()
                   }
 
-                  Button("Login in Terminal") {
+                  Button(model.isAuthenticated ? "Re-Login in Terminal" : "Login in Terminal") {
                     model.openGitHubLogin()
                   }
+
+                  Button("Logout Selected Account") {
+                    model.logoutSelectedAccount()
+                  }
+                  .disabled(!model.isAuthenticated || model.isLoggingOut || model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
               }
             }
@@ -861,16 +1053,23 @@ struct ContentView: View {
           }
 
           VStack(alignment: .leading, spacing: 22) {
+            SafetyCard(isArmed: $model.safetyArmEnabled, dryRun: model.dryRun)
+
             SectionCard(title: "Run", subtitle: "Launch the CLI engine from the GUI or open the raw terminal flow.") {
               VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
-                  Button(model.dryRun ? "Preview Cleanup" : "Run Cleanup") {
+                  Button(model.dryRun ? "Preview Cleanup" : "Execute Cleanup") {
                     model.runCleanup()
                   }
+                  .buttonStyle(.borderedProminent)
                   .disabled(!model.canRunCleanup)
 
                   Button("Open CLI in Terminal") {
                     model.openCLIInTerminal()
+                  }
+
+                  Button("Clear Log") {
+                    model.logText = "W.T.L. GUI ready.\n"
                   }
 
                   if model.isRunning {
@@ -880,7 +1079,11 @@ struct ContentView: View {
                   }
                 }
 
-                Text("The GUI keeps `gh-actions-cleanup` as the execution engine, so CLI and GUI behavior stay aligned.")
+                Text(model.safetyArmEnabled ? "Safety switch is on. The selected run action is unlocked." : "Safety switch is off. Turn it on in the caution panel before cleanup can run.")
+                  .font(.system(size: 12, weight: .semibold, design: .rounded))
+                  .foregroundStyle(model.safetyArmEnabled ? Color.green : Color.red)
+
+                Text("The GUI uses the bundled `gh-actions-cleanup` CLI engine, so GUI and Terminal behavior stay aligned.")
                   .font(.system(size: 11, weight: .medium, design: .rounded))
                   .foregroundStyle(.secondary)
               }
@@ -893,6 +1096,15 @@ struct ContentView: View {
               ))
               .font(.system(size: 12, weight: .regular, design: .monospaced))
               .frame(minHeight: 380)
+              .foregroundStyle(Color.primary)
+              .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                  .fill(Color(nsColor: .textBackgroundColor))
+                  .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                      .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                  )
+              )
             }
           }
           .frame(minWidth: 420, maxWidth: .infinity)
@@ -904,8 +1116,8 @@ struct ContentView: View {
     .background(
       LinearGradient(
         colors: [
-          Color(red: 0.97, green: 0.98, blue: 1.0),
-          Color(red: 0.92, green: 0.95, blue: 0.99)
+          Color(red: 0.96, green: 0.97, blue: 0.99),
+          Color(red: 0.93, green: 0.95, blue: 0.98)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
