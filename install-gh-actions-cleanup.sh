@@ -6,6 +6,7 @@ APP_NAME="gh-actions-cleanup"
 APP_DISPLAY_NAME="GH Workflow Clean"
 APP_BUNDLE_NAME="${APP_DISPLAY_NAME}.app"
 APP_BUNDLE_ID="com.waynetechlab.ghworkflowclean"
+APP_VERSION="1.1.0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
@@ -187,7 +188,7 @@ write_info_plist() {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>${APP_VERSION}</string>
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>LSMinimumSystemVersion</key>
@@ -218,7 +219,8 @@ fi
 /usr/bin/osascript - "$CLI_PATH" <<'OSA'
 on run argv
   set cliPath to item 1 of argv
-  set commandLine to "clear; " & quoted form of cliPath & "; EXIT_CODE=$?; printf '\n'; if [ $EXIT_CODE -eq 0 ]; then echo 'GH Workflow Clean finished.'; else echo \"GH Workflow Clean exited with code $EXIT_CODE.\"; fi; echo; read -r -p 'Press Enter to close this window...' _; exit"
+  set innerCommand to "clear; " & quoted form of cliPath & "; EXIT_CODE=$?; printf '\n'; if [ $EXIT_CODE -eq 0 ]; then echo 'GH Workflow Clean finished.'; else echo \"GH Workflow Clean exited with code $EXIT_CODE.\"; fi"
+  set commandLine to "/bin/bash -lc " & quoted form of innerCommand
   tell application "Terminal"
     activate
     do script commandLine
