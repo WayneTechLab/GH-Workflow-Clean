@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_OWNER="WayneTechLab"
 REPO_NAME="GH-Workflow-Clean"
 REPO_REF="main"
-RAW_BASE="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_REF}"
+ARCHIVE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${REPO_REF}.tar.gz"
 TMP_DIR=""
 
 die() {
@@ -29,17 +29,11 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
-download_file() {
-  local remote_path="$1"
-  local local_path="$2"
-
-  curl -fsSL "${RAW_BASE}/${remote_path}" -o "$local_path"
-}
-
 main() {
   trap cleanup EXIT
   require_macos
   require_command curl
+  require_command tar
 
   if ! command -v gh >/dev/null 2>&1; then
     if command -v brew >/dev/null 2>&1; then
@@ -49,19 +43,16 @@ main() {
   fi
 
   TMP_DIR="$(mktemp -d /tmp/gh-workflow-clean-install.XXXXXX)"
-  mkdir -p "$TMP_DIR/assets" "$TMP_DIR/macos"
+  mkdir -p "$TMP_DIR"
 
   info "Downloading ${REPO_OWNER}/${REPO_NAME} (${REPO_REF})"
-  download_file "gh-actions-cleanup" "$TMP_DIR/gh-actions-cleanup"
-  download_file "install-gh-actions-cleanup.sh" "$TMP_DIR/install-gh-actions-cleanup.sh"
-  download_file "assets/app-icon.svg" "$TMP_DIR/assets/app-icon.svg"
-  download_file "macos/GHWorkflowCleanGUI.swift" "$TMP_DIR/macos/GHWorkflowCleanGUI.swift"
-
-  chmod +x "$TMP_DIR/gh-actions-cleanup" "$TMP_DIR/install-gh-actions-cleanup.sh"
+  curl -fsSL "$ARCHIVE_URL" -o "$TMP_DIR/repo.tar.gz"
+  tar -xzf "$TMP_DIR/repo.tar.gz" -C "$TMP_DIR"
 
   info "Installing command-line tool and macOS app"
   (
-    cd "$TMP_DIR"
+    cd "$TMP_DIR/${REPO_NAME}-${REPO_REF}"
+    chmod +x gh-actions-cleanup install-gh-actions-cleanup.sh install.sh
     ./install-gh-actions-cleanup.sh
   )
 
