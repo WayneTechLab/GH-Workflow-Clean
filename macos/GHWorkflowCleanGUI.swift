@@ -717,87 +717,100 @@ private func quotedAppleScript(commandLine: String) -> String {
   return "\"\(escaped)\""
 }
 
-struct HeroCard: View {
-  let icon: NSImage?
-  let lastSessionSummary: String?
+private enum DashboardTheme {
+  static let canvasTop = Color(red: 0.03, green: 0.05, blue: 0.09)
+  static let canvasBottom = Color(red: 0.06, green: 0.09, blue: 0.14)
+  static let panel = Color(red: 0.07, green: 0.10, blue: 0.15)
+  static let panelAlt = Color(red: 0.09, green: 0.13, blue: 0.19)
+  static let panelStrong = Color(red: 0.05, green: 0.08, blue: 0.12)
+  static let field = Color(red: 0.10, green: 0.14, blue: 0.20)
+  static let border = Color.white.opacity(0.10)
+  static let text = Color(red: 0.95, green: 0.97, blue: 0.99)
+  static let muted = Color(red: 0.72, green: 0.78, blue: 0.86)
+  static let subtle = Color(red: 0.53, green: 0.60, blue: 0.69)
+  static let accent = Color(red: 0.29, green: 0.78, blue: 1.0)
+  static let success = Color(red: 0.18, green: 0.82, blue: 0.54)
+  static let warning = Color(red: 0.98, green: 0.73, blue: 0.23)
+  static let danger = Color(red: 0.94, green: 0.33, blue: 0.28)
+  static let cautionPanel = Color(red: 0.24, green: 0.15, blue: 0.08)
+}
 
-  var body: some View {
-    ZStack(alignment: .topLeading) {
-      RoundedRectangle(cornerRadius: 28, style: .continuous)
-        .fill(
-          LinearGradient(
-            colors: [
-              Color(red: 0.03, green: 0.08, blue: 0.16),
-              Color(red: 0.04, green: 0.20, blue: 0.33)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+private extension View {
+  func dashboardFieldStyle() -> some View {
+    self
+      .padding(.horizontal, 14)
+      .padding(.vertical, 10)
+      .background(
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(DashboardTheme.field)
+          .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+              .stroke(DashboardTheme.border, lineWidth: 1)
           )
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-
-      VStack(alignment: .leading, spacing: 18) {
-        HStack(alignment: .center, spacing: 16) {
-          if let icon {
-            Image(nsImage: icon)
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 84, height: 84)
-              .shadow(color: .black.opacity(0.18), radius: 16, y: 10)
-          }
-
-          VStack(alignment: .leading, spacing: 8) {
-            Text("W.T.L.")
-              .font(.system(size: 14, weight: .semibold, design: .rounded))
-              .tracking(2.2)
-              .foregroundStyle(Color(red: 0.52, green: 0.91, blue: 1.0))
-
-            Text(appTitle)
-              .font(.system(size: 34, weight: .bold, design: .rounded))
-              .foregroundStyle(.white)
-
-            Text("Native macOS control room for GitHub Actions cleanup.")
-              .font(.system(size: 15, weight: .medium, design: .rounded))
-              .foregroundStyle(Color.white.opacity(0.78))
-          }
-        }
-
-        HStack(spacing: 10) {
-          Badge(text: "Native GUI")
-          Badge(text: "CLI Engine")
-          Badge(text: "No Token Storage")
-        }
-
-        if let lastSessionSummary {
-          Text(lastSessionSummary)
-            .font(.system(size: 13, weight: .medium, design: .rounded))
-            .foregroundStyle(Color.white.opacity(0.72))
-        }
-      }
-      .padding(28)
-    }
-    .frame(minHeight: 220)
+      )
   }
 }
 
-struct Badge: View {
+struct PanelCard<Content: View>: View {
+  let title: String
+  let subtitle: String
+  let compact: Bool
+  @ViewBuilder let content: Content
+
+  init(title: String, subtitle: String, compact: Bool = false, @ViewBuilder content: () -> Content) {
+    self.title = title
+    self.subtitle = subtitle
+    self.compact = compact
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: compact ? 14 : 18) {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title)
+          .font(.system(size: compact ? 16 : 18, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
+        Text(subtitle)
+          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.muted)
+          .lineSpacing(2)
+      }
+
+      content
+    }
+    .padding(compact ? 18 : 22)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 24, style: .continuous)
+        .fill(DashboardTheme.panel)
+        .overlay(
+          RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+    )
+  }
+}
+
+struct PillBadge: View {
   let text: String
+  let tint: Color
 
   var body: some View {
     Text(text)
-      .font(.system(size: 12, weight: .semibold, design: .rounded))
-      .foregroundStyle(Color.white)
+      .font(.system(size: 11, weight: .semibold, design: .rounded))
+      .foregroundStyle(DashboardTheme.text)
       .padding(.horizontal, 12)
-      .padding(.vertical, 6)
-      .background(Color.white.opacity(0.12))
+      .padding(.vertical, 7)
+      .background(tint.opacity(0.22))
+      .overlay(
+        Capsule()
+          .stroke(tint.opacity(0.45), lineWidth: 1)
+      )
       .clipShape(Capsule())
   }
 }
 
-struct StatusCard: View {
+struct BannerCard: View {
   let title: String
   let detail: String
   let kind: StatusKind
@@ -806,19 +819,18 @@ struct StatusCard: View {
     HStack(alignment: .top, spacing: 14) {
       Image(systemName: kind.icon)
         .font(.system(size: 18, weight: .bold))
-        .foregroundStyle(kind.tint)
-        .frame(width: 30, height: 30)
-        .background(kind.tint.opacity(0.14))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .foregroundStyle(DashboardTheme.text)
+        .frame(width: 36, height: 36)
+        .background(kind.tint.opacity(0.85))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
       VStack(alignment: .leading, spacing: 6) {
         Text(title)
-          .font(.system(size: 18, weight: .bold, design: .rounded))
-          .foregroundStyle(Color.primary)
-
+          .font(.system(size: 17, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
         Text(detail)
           .font(.system(size: 13, weight: .medium, design: .rounded))
-          .foregroundStyle(Color.primary.opacity(0.88))
+          .foregroundStyle(DashboardTheme.muted)
           .lineSpacing(3)
       }
 
@@ -827,12 +839,91 @@ struct StatusCard: View {
     .padding(18)
     .background(
       RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .fill(kind.tint.opacity(0.08))
+        .fill(kind.tint.opacity(0.12))
         .overlay(
           RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(kind.tint.opacity(0.24), lineWidth: 1)
+            .stroke(kind.tint.opacity(0.34), lineWidth: 1)
         )
     )
+  }
+}
+
+struct HeaderPanel: View {
+  let icon: NSImage?
+  let lastSessionSummary: String?
+  let statusTitle: String
+  let statusKind: StatusKind
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 22) {
+      if let icon {
+        Image(nsImage: icon)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: 92, height: 92)
+          .shadow(color: .black.opacity(0.35), radius: 24, y: 14)
+      }
+
+      VStack(alignment: .leading, spacing: 10) {
+        Text("W.T.L.")
+          .font(.system(size: 14, weight: .semibold, design: .rounded))
+          .tracking(2.4)
+          .foregroundStyle(DashboardTheme.accent)
+
+        Text(appTitle)
+          .font(.system(size: 34, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
+
+        Text("Native macOS SwiftUI control panel for GitHub Actions cleanup.")
+          .font(.system(size: 14, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.muted)
+      }
+
+      Spacer(minLength: 20)
+
+      VStack(alignment: .trailing, spacing: 12) {
+        HStack(spacing: 10) {
+          PillBadge(text: "Native SwiftUI", tint: DashboardTheme.accent)
+          PillBadge(text: "CLI Engine", tint: DashboardTheme.success)
+          PillBadge(text: "Version 0.0.4", tint: DashboardTheme.warning)
+        }
+
+        Text(statusTitle)
+          .font(.system(size: 13, weight: .bold, design: .rounded))
+          .foregroundStyle(statusKind.tint)
+
+        if let lastSessionSummary {
+          Text(lastSessionSummary)
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .foregroundStyle(DashboardTheme.subtle)
+        }
+      }
+    }
+    .padding(24)
+    .background(
+      RoundedRectangle(cornerRadius: 28, style: .continuous)
+        .fill(
+          LinearGradient(
+            colors: [DashboardTheme.panelStrong, DashboardTheme.panelAlt],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+    )
+  }
+}
+
+struct FieldLabel: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(.system(size: 12, weight: .semibold, design: .rounded))
+      .foregroundStyle(DashboardTheme.muted)
   }
 }
 
@@ -842,25 +933,36 @@ struct FixedValueRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(label)
-        .font(.system(size: 12, weight: .semibold, design: .rounded))
-        .foregroundStyle(.secondary)
+      FieldLabel(text: label)
 
       Text(value)
         .font(.system(size: 14, weight: .semibold, design: .rounded))
-        .foregroundStyle(Color.primary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .foregroundStyle(DashboardTheme.text)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(nsColor: .textBackgroundColor))
-            .overlay(
-              RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
-            )
-        )
+        .dashboardFieldStyle()
     }
+  }
+}
+
+struct DashboardButtonStyle: ButtonStyle {
+  let tint: Color
+  let bordered: Bool
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 13, weight: .bold, design: .rounded))
+      .foregroundStyle(bordered ? DashboardTheme.text : DashboardTheme.panelStrong)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 11)
+      .background(
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(bordered ? tint.opacity(configuration.isPressed ? 0.55 : 0.82) : tint.opacity(configuration.isPressed ? 0.70 : 1.0))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .stroke(bordered ? tint.opacity(0.45) : tint.opacity(0.90), lineWidth: 1)
+      )
+      .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
   }
 }
 
@@ -869,261 +971,331 @@ struct SafetyCard: View {
   let dryRun: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack(alignment: .center, spacing: 12) {
+    VStack(alignment: .leading, spacing: 16) {
+      HStack(alignment: .top, spacing: 14) {
         Image(systemName: "exclamationmark.triangle.fill")
-          .font(.system(size: 18, weight: .bold))
-          .foregroundStyle(Color.white)
-          .frame(width: 34, height: 34)
-          .background(Color(red: 0.82, green: 0.19, blue: 0.13))
-          .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          .font(.system(size: 20, weight: .bold))
+          .foregroundStyle(DashboardTheme.text)
+          .frame(width: 40, height: 40)
+          .background(DashboardTheme.danger)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Caution")
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Warning: Permanent Delete")
             .font(.system(size: 18, weight: .bold, design: .rounded))
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(DashboardTheme.text)
 
-          Text(dryRun ? "Dry run is safe, but this tool is built for permanent deletion. Check your target before you continue." : "Warning: this will permanently delete GitHub Actions data. There is no undo.")
+          Text(dryRun ? "Dry run is enabled, but this app is built for destructive cleanup. Confirm the repo and account before you continue." : "This will permanently delete GitHub Actions data. Workflow runs, artifacts, caches, and disabled workflows cannot be restored.")
             .font(.system(size: 13, weight: .medium, design: .rounded))
-            .foregroundStyle(Color.primary.opacity(0.88))
+            .foregroundStyle(DashboardTheme.muted)
             .lineSpacing(3)
         }
       }
 
-      Toggle("I understand this can permanently delete GitHub Actions data", isOn: $isArmed)
-        .toggleStyle(.switch)
-        .font(.system(size: 13, weight: .semibold, design: .rounded))
+      Toggle(isOn: $isArmed) {
+        Text("Arm destructive cleanup")
+          .font(.system(size: 14, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
+      }
+      .toggleStyle(.switch)
+      .tint(DashboardTheme.danger)
 
-      Text("The run button stays locked until this switch is turned on.")
-        .font(.system(size: 11, weight: .medium, design: .rounded))
-        .foregroundStyle(.secondary)
+      Text(isArmed ? "Safety lock is OFF. Cleanup buttons are unlocked." : "Safety lock is ON. Turn this switch on before cleanup can run.")
+        .font(.system(size: 12, weight: .semibold, design: .rounded))
+        .foregroundStyle(isArmed ? DashboardTheme.success : DashboardTheme.warning)
     }
-    .padding(18)
+    .padding(20)
     .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .fill(Color(red: 1.0, green: 0.96, blue: 0.93))
+      RoundedRectangle(cornerRadius: 24, style: .continuous)
+        .fill(DashboardTheme.cautionPanel)
         .overlay(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(Color(red: 0.90, green: 0.52, blue: 0.28), lineWidth: 1)
+          RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .stroke(DashboardTheme.danger.opacity(0.45), lineWidth: 1)
         )
     )
   }
 }
 
-struct SectionCard<Content: View>: View {
-  let title: String
-  let subtitle: String
-  @ViewBuilder let content: Content
+struct LogConsoleView: NSViewRepresentable {
+  let text: String
 
-  var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(title)
-          .font(.system(size: 18, weight: .bold, design: .rounded))
-        Text(subtitle)
-          .font(.system(size: 12, weight: .medium, design: .rounded))
-          .foregroundStyle(.secondary)
-      }
+  func makeNSView(context: Context) -> NSScrollView {
+    let scrollView = NSScrollView()
+    scrollView.hasVerticalScroller = true
+    scrollView.drawsBackground = false
+    scrollView.borderType = .noBorder
 
-      content
-    }
-    .padding(22)
-    .background(
-      RoundedRectangle(cornerRadius: 24, style: .continuous)
-        .fill(Color(nsColor: .windowBackgroundColor))
-        .shadow(color: .black.opacity(0.05), radius: 18, y: 8)
-    )
+    let textView = NSTextView()
+    textView.isEditable = false
+    textView.isSelectable = true
+    textView.drawsBackground = true
+    textView.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.13, alpha: 1)
+    textView.textColor = NSColor(calibratedRed: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+    textView.insertionPointColor = .clear
+    textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    textView.textContainerInset = NSSize(width: 12, height: 12)
+    textView.isRichText = false
+    textView.string = text
+
+    scrollView.documentView = textView
+    return scrollView
+  }
+
+  func updateNSView(_ nsView: NSScrollView, context: Context) {
+    guard let textView = nsView.documentView as? NSTextView else { return }
+    textView.string = text
+    textView.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.13, alpha: 1)
+    textView.textColor = NSColor(calibratedRed: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+    textView.scrollToEndOfDocument(nil)
   }
 }
 
 struct ContentView: View {
   @StateObject private var model = CleanupViewModel()
 
+  private var actionToggleTint: Color { DashboardTheme.accent }
+
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 22) {
-        HeroCard(icon: model.bundledIcon, lastSessionSummary: model.lastSessionSummary)
-        StatusCard(title: model.statusTitle, detail: model.statusDetail, kind: model.statusKind)
+    GeometryReader { geometry in
+      let leftWidth = max(330.0, min(380.0, geometry.size.width * 0.28))
+      let middleWidth = max(360.0, min(430.0, geometry.size.width * 0.31))
 
-        HStack(alignment: .top, spacing: 22) {
-          VStack(alignment: .leading, spacing: 22) {
-            SectionCard(title: "Connection", subtitle: "Select the GitHub host and authenticated account.") {
-              VStack(alignment: .leading, spacing: 14) {
-                StatusCard(title: model.authHeadline, detail: "\(model.authSummary)\n\(model.authActionHint)", kind: model.isAuthenticated ? .ready : .warning)
+      ZStack {
+        LinearGradient(
+          colors: [DashboardTheme.canvasTop, DashboardTheme.canvasBottom],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
 
-                if model.availableHosts.count > 1 {
-                  VStack(alignment: .leading, spacing: 6) {
-                    Text("Detected GitHub Hosts")
-                      .font(.system(size: 12, weight: .semibold, design: .rounded))
-                      .foregroundStyle(.secondary)
-                    Picker("Host", selection: $model.host) {
-                      ForEach(model.availableHosts, id: \.self) { host in
-                        Text(host).tag(host)
-                      }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 240)
-                  }
-                }
+        VStack(spacing: 18) {
+          HeaderPanel(
+            icon: model.bundledIcon,
+            lastSessionSummary: model.lastSessionSummary,
+            statusTitle: model.statusTitle,
+            statusKind: model.statusKind
+          )
 
-                VStack(alignment: .leading, spacing: 6) {
-                  Text("GitHub Host")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                  TextField("github.com", text: $model.host)
-                    .textFieldStyle(.roundedBorder)
-                }
+          HStack(alignment: .top, spacing: 18) {
+            leftRail
+              .frame(width: leftWidth)
 
-                if model.availableAccounts.count > 1 {
-                  VStack(alignment: .leading, spacing: 6) {
-                    Text("Authenticated Account")
-                      .font(.system(size: 12, weight: .semibold, design: .rounded))
-                      .foregroundStyle(.secondary)
-                    Picker("Account", selection: $model.account) {
-                      ForEach(model.availableAccounts, id: \.self) { account in
-                        Text(account).tag(account)
-                      }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 280)
-                  }
-                } else if let onlyAccount = model.availableAccounts.first {
-                  FixedValueRow(label: "Authenticated Account", value: onlyAccount)
-                } else {
-                  FixedValueRow(label: "Authenticated Account", value: "No GitHub account logged in for this host")
-                }
+            middleRail
+              .frame(width: middleWidth)
 
-                HStack(spacing: 10) {
-                  Button("Refresh Login Status") {
-                    model.refreshAuthStatus()
-                  }
+            rightRail
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+          }
+          .frame(maxHeight: .infinity)
+        }
+        .padding(20)
+      }
+    }
+    .frame(minWidth: 1380, minHeight: 880)
+    .preferredColorScheme(.dark)
+  }
 
-                  Button(model.isAuthenticated ? "Re-Login in Terminal" : "Login in Terminal") {
-                    model.openGitHubLogin()
-                  }
+  private var leftRail: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      PanelCard(title: "GitHub Auth", subtitle: "Clear account state, login controls, and fixed-value handling.") {
+        BannerCard(
+          title: model.authHeadline,
+          detail: "\(model.authSummary)\n\(model.authActionHint)",
+          kind: model.isAuthenticated ? .ready : .warning
+        )
 
-                  Button("Logout Selected Account") {
-                    model.logoutSelectedAccount()
-                  }
-                  .disabled(!model.isAuthenticated || model.isLoggingOut || model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+        if model.availableHosts.count > 1 {
+          VStack(alignment: .leading, spacing: 6) {
+            FieldLabel(text: "Detected GitHub Hosts")
+            Picker("", selection: $model.host) {
+              ForEach(model.availableHosts, id: \.self) { host in
+                Text(host).tag(host)
               }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+          }
+        } else if let onlyHost = model.availableHosts.first {
+          FixedValueRow(label: "Detected GitHub Host", value: onlyHost)
+        }
 
-            SectionCard(title: "Target", subtitle: "Enter OWNER/REPO, HOST/OWNER/REPO, or a full GitHub repo URL.") {
-              TextField("OWNER/REPO or https://github.com/OWNER/REPO", text: $model.repoTarget)
-                .textFieldStyle(.roundedBorder)
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "GitHub Host")
+          TextField("github.com", text: $model.host)
+            .textFieldStyle(.plain)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+        }
 
-              if !model.repoTarget.isEmpty {
-                Text("The GUI accepts a repo URL and will hand it to the CLI exactly as entered.")
-                  .font(.system(size: 11, weight: .medium, design: .rounded))
-                  .foregroundStyle(.secondary)
+        if model.availableAccounts.count > 1 {
+          VStack(alignment: .leading, spacing: 6) {
+            FieldLabel(text: "Authenticated Account")
+            Picker("", selection: $model.account) {
+              ForEach(model.availableAccounts, id: \.self) { account in
+                Text(account).tag(account)
               }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+          }
+        } else if let onlyAccount = model.availableAccounts.first {
+          FixedValueRow(label: "Authenticated Account", value: onlyAccount)
+        } else {
+          FixedValueRow(label: "Authenticated Account", value: "No logged-in account found for this host")
+        }
 
-            SectionCard(title: "Actions", subtitle: "Choose one exact run, a filtered run series, or a full repository cleanup.") {
-              VStack(alignment: .leading, spacing: 12) {
-                Toggle("Full cleanup", isOn: $model.fullCleanup)
-                  .toggleStyle(.switch)
-
-                Toggle("Disable workflows", isOn: $model.disableWorkflows)
-                  .disabled(model.fullCleanup)
-
-                Toggle("Delete workflow runs", isOn: $model.deleteRuns)
-                  .disabled(model.fullCleanup)
-
-                Toggle("Delete artifacts", isOn: $model.deleteArtifacts)
-                  .disabled(model.fullCleanup)
-
-                Toggle("Delete caches", isOn: $model.deleteCaches)
-                  .disabled(model.fullCleanup)
-
-                Divider()
-
-                Toggle("Dry run only", isOn: $model.dryRun)
-                  .toggleStyle(.switch)
-
-                TextField("Specific run ID or GitHub Actions run URL (optional)", text: $model.runTarget)
-                  .textFieldStyle(.roundedBorder)
-
-                TextField("Run filter text (optional)", text: $model.runFilter)
-                  .textFieldStyle(.roundedBorder)
-              }
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(spacing: 10) {
+            Button("Refresh") {
+              model.refreshAuthStatus()
             }
+            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+
+            Button(model.isAuthenticated ? "Re-Login" : "Login") {
+              model.openGitHubLogin()
+            }
+            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: false))
           }
 
-          VStack(alignment: .leading, spacing: 22) {
-            SafetyCard(isArmed: $model.safetyArmEnabled, dryRun: model.dryRun)
-
-            SectionCard(title: "Run", subtitle: "Launch the CLI engine from the GUI or open the raw terminal flow.") {
-              VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                  Button(model.dryRun ? "Preview Cleanup" : "Execute Cleanup") {
-                    model.runCleanup()
-                  }
-                  .buttonStyle(.borderedProminent)
-                  .disabled(!model.canRunCleanup)
-
-                  Button("Open CLI in Terminal") {
-                    model.openCLIInTerminal()
-                  }
-
-                  Button("Clear Log") {
-                    model.logText = "W.T.L. GUI ready.\n"
-                  }
-
-                  if model.isRunning {
-                    Button("Cancel") {
-                      model.cancelRun()
-                    }
-                  }
-                }
-
-                Text(model.safetyArmEnabled ? "Safety switch is on. The selected run action is unlocked." : "Safety switch is off. Turn it on in the caution panel before cleanup can run.")
-                  .font(.system(size: 12, weight: .semibold, design: .rounded))
-                  .foregroundStyle(model.safetyArmEnabled ? Color.green : Color.red)
-
-                Text("The GUI uses the bundled `gh-actions-cleanup` CLI engine, so GUI and Terminal behavior stay aligned.")
-                  .font(.system(size: 11, weight: .medium, design: .rounded))
-                  .foregroundStyle(.secondary)
-              }
-            }
-
-            SectionCard(title: "Output", subtitle: "Live CLI stdout and stderr.") {
-              TextEditor(text: Binding(
-                get: { model.logText },
-                set: { _ in }
-              ))
-              .font(.system(size: 12, weight: .regular, design: .monospaced))
-              .frame(minHeight: 380)
-              .foregroundStyle(Color.primary)
-              .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                  .fill(Color(nsColor: .textBackgroundColor))
-                  .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                      .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                  )
-              )
-            }
+          Button("Logout Selected Account") {
+            model.logoutSelectedAccount()
           }
-          .frame(minWidth: 420, maxWidth: .infinity)
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+          .disabled(!model.isAuthenticated || model.isLoggingOut || model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
-      .padding(28)
+
+      PanelCard(title: "Repository Target", subtitle: "Paste OWNER/REPO, HOST/OWNER/REPO, or a full GitHub repo URL.") {
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "Repository or URL")
+          TextField("OWNER/REPO or https://github.com/OWNER/REPO", text: $model.repoTarget)
+            .textFieldStyle(.plain)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+        }
+
+        Text("The GUI passes this directly to the CLI engine. Repo URLs and custom GitHub hosts are supported.")
+          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.muted)
+          .lineSpacing(2)
+      }
+
+      Spacer(minLength: 0)
     }
-    .frame(minWidth: 1100, minHeight: 760)
-    .background(
-      LinearGradient(
-        colors: [
-          Color(red: 0.96, green: 0.97, blue: 0.99),
-          Color(red: 0.93, green: 0.95, blue: 0.98)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .ignoresSafeArea()
-    )
+  }
+
+  private var middleRail: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      PanelCard(title: "Cleanup Scope", subtitle: "Single control panel for actions, filters, and destructive state.") {
+        Toggle("Full cleanup", isOn: $model.fullCleanup)
+          .toggleStyle(.switch)
+          .tint(actionToggleTint)
+          .foregroundStyle(DashboardTheme.text)
+
+        Divider().overlay(DashboardTheme.border)
+
+        Toggle("Disable workflows", isOn: $model.disableWorkflows)
+          .toggleStyle(.switch)
+          .tint(actionToggleTint)
+          .foregroundStyle(DashboardTheme.text)
+          .disabled(model.fullCleanup)
+
+        Toggle("Delete workflow runs", isOn: $model.deleteRuns)
+          .toggleStyle(.switch)
+          .tint(actionToggleTint)
+          .foregroundStyle(DashboardTheme.text)
+          .disabled(model.fullCleanup)
+
+        Toggle("Delete artifacts", isOn: $model.deleteArtifacts)
+          .toggleStyle(.switch)
+          .tint(actionToggleTint)
+          .foregroundStyle(DashboardTheme.text)
+          .disabled(model.fullCleanup)
+
+        Toggle("Delete caches", isOn: $model.deleteCaches)
+          .toggleStyle(.switch)
+          .tint(actionToggleTint)
+          .foregroundStyle(DashboardTheme.text)
+          .disabled(model.fullCleanup)
+
+        Divider().overlay(DashboardTheme.border)
+
+        Toggle("Dry run only", isOn: $model.dryRun)
+          .toggleStyle(.switch)
+          .tint(DashboardTheme.warning)
+          .foregroundStyle(DashboardTheme.text)
+
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "Specific Run ID or Run URL")
+          TextField("Optional exact run target", text: $model.runTarget)
+            .textFieldStyle(.plain)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+        }
+
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "Run Filter")
+          TextField("Optional run name filter", text: $model.runFilter)
+            .textFieldStyle(.plain)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+        }
+      }
+
+      SafetyCard(isArmed: $model.safetyArmEnabled, dryRun: model.dryRun)
+
+      PanelCard(title: "Execution", subtitle: "The native app runs the bundled CLI engine and keeps the raw terminal fallback available.", compact: true) {
+        HStack(spacing: 10) {
+          Button(model.dryRun ? "Preview Cleanup" : "Execute Cleanup") {
+            model.runCleanup()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.danger, bordered: false))
+          .disabled(!model.canRunCleanup)
+
+          Button("Open CLI") {
+            model.openCLIInTerminal()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+
+          Button("Clear Log") {
+            model.logText = "W.T.L. GUI ready.\n"
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: true))
+        }
+
+        if model.isRunning {
+          Button("Cancel Active Run") {
+            model.cancelRun()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+        }
+
+        Text(model.safetyArmEnabled ? "Safety arm is ON. Cleanup is unlocked for the selected target." : "Safety arm is OFF. Turn on the destructive cleanup switch before execution.")
+          .font(.system(size: 12, weight: .semibold, design: .rounded))
+          .foregroundStyle(model.safetyArmEnabled ? DashboardTheme.success : DashboardTheme.warning)
+      }
+
+      Spacer(minLength: 0)
+    }
+  }
+
+  private var rightRail: some View {
+    PanelCard(title: "Live Output", subtitle: "Readable, high-contrast CLI output streamed into the native app.") {
+      LogConsoleView(text: model.logText)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(DashboardTheme.panelStrong)
+            .overlay(
+              RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(DashboardTheme.border, lineWidth: 1)
+            )
+        )
+    }
   }
 }
 

@@ -5,7 +5,7 @@
 - a native macOS GUI app
 - the original CLI engine
 
-Current release: `0.0.4`
+Current release: `0.0.5`
 
 ## What It Does
 
@@ -114,14 +114,13 @@ App launch:
 
 ## GUI Highlights
 
-- native macOS window with W.T.L. branding
+- native macOS SwiftUI window with a single-screen panel layout
+- high-contrast dark UI with readable text and a unified visual system
 - clear GitHub login state banner with host and account readiness
-- host field plus account controls that avoid pointless dropdowns for single fixed items
-- repo/URL input
-- toggles for full cleanup, runs, workflows, artifacts, caches, and dry-run
+- account/host controls that avoid pointless dropdowns for single fixed items
+- repo/URL input, destructive scope toggles, and explicit safety arm switch
 - logout button for the selected GitHub account
-- explicit safety arm switch before cleanup can run
-- live output panel that shows the same CLI messages you would get in Terminal
+- live output console with readable CLI logs inside the app
 - login and CLI fallback buttons so users can stay in the secure `gh` auth flow
 
 ## Common Commands
