@@ -19,7 +19,7 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.2.0`
+Current release: `0.2.1`
 
 ## Warning
 

@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.1"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -92,10 +92,10 @@ enum StatusKind {
 
   var tint: Color {
     switch self {
-    case .ready: return Color(red: 0.16, green: 0.74, blue: 0.49)
-    case .warning: return Color(red: 0.93, green: 0.63, blue: 0.18)
-    case .error: return Color(red: 0.88, green: 0.25, blue: 0.24)
-    case .running: return Color(red: 0.17, green: 0.56, blue: 0.92)
+    case .ready: return Color(red: 79 / 255, green: 169 / 255, blue: 139 / 255)
+    case .warning: return Color(red: 209 / 255, green: 165 / 255, blue: 82 / 255)
+    case .error: return Color(red: 196 / 255, green: 98 / 255, blue: 141 / 255)
+    case .running: return Color(red: 121 / 255, green: 180 / 255, blue: 245 / 255)
     }
   }
 
@@ -1153,21 +1153,24 @@ private enum DashboardTheme {
   static let coolWhite = Color(red: 247 / 255, green: 248 / 255, blue: 250 / 255)
   static let gridGray = Color(red: 216 / 255, green: 221 / 255, blue: 227 / 255)
 
-  static let canvasTop = Color(red: 9 / 255, green: 21 / 255, blue: 38 / 255)
-  static let canvasBottom = Color(red: 14 / 255, green: 35 / 255, blue: 63 / 255)
-  static let panel = Color(red: 12 / 255, green: 31 / 255, blue: 53 / 255)
-  static let panelAlt = Color(red: 17 / 255, green: 45 / 255, blue: 77 / 255)
-  static let panelStrong = Color(red: 8 / 255, green: 22 / 255, blue: 39 / 255)
-  static let field = Color(red: 17 / 255, green: 39 / 255, blue: 66 / 255)
-  static let border = gridGray.opacity(0.18)
+  static let canvasTop = Color(red: 15 / 255, green: 23 / 255, blue: 32 / 255)
+  static let canvasBottom = Color(red: 17 / 255, green: 25 / 255, blue: 35 / 255)
+  static let panel = Color(red: 24 / 255, green: 32 / 255, blue: 43 / 255)
+  static let panelAlt = Color(red: 27 / 255, green: 37 / 255, blue: 49 / 255)
+  static let panelStrong = Color(red: 20 / 255, green: 28 / 255, blue: 38 / 255)
+  static let field = Color(red: 30 / 255, green: 40 / 255, blue: 53 / 255)
+  static let border = Color.white.opacity(0.08)
   static let text = coolWhite
-  static let muted = gridGray.opacity(0.86)
-  static let subtle = gridGray.opacity(0.62)
-  static let accent = deepBlue
-  static let success = Color(red: 74 / 255, green: 201 / 255, blue: 158 / 255)
-  static let warning = Color(red: 0.98, green: 0.73, blue: 0.23)
-  static let danger = accentPink
-  static let cautionPanel = Color(red: 53 / 255, green: 19 / 255, blue: 43 / 255)
+  static let muted = Color(red: 211 / 255, green: 219 / 255, blue: 230 / 255)
+  static let subtle = Color(red: 148 / 255, green: 163 / 255, blue: 184 / 255)
+  static let accent = Color(red: 125 / 255, green: 178 / 255, blue: 239 / 255)
+  static let success = Color(red: 42 / 255, green: 110 / 255, blue: 88 / 255)
+  static let warning = Color(red: 209 / 255, green: 165 / 255, blue: 82 / 255)
+  static let danger = Color(red: 133 / 255, green: 49 / 255, blue: 94 / 255)
+  static let link = Color(red: 141 / 255, green: 198 / 255, blue: 255 / 255)
+  static let warningSurface = Color(red: 250 / 255, green: 239 / 255, blue: 219 / 255)
+  static let warningText = Color(red: 74 / 255, green: 54 / 255, blue: 24 / 255)
+  static let warningSubtle = Color(red: 107 / 255, green: 83 / 255, blue: 46 / 255)
 }
 
 private extension View {
@@ -1203,7 +1206,7 @@ struct PanelCard<Content: View>: View {
     VStack(alignment: .leading, spacing: compact ? 14 : 18) {
       VStack(alignment: .leading, spacing: 6) {
         Text(title)
-          .font(.system(size: compact ? 16 : 18, weight: .bold, design: .rounded))
+          .font(.system(size: compact ? 15 : 17, weight: .bold, design: .rounded))
           .foregroundStyle(DashboardTheme.text)
         Text(subtitle)
           .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -1216,10 +1219,10 @@ struct PanelCard<Content: View>: View {
     .padding(compact ? 18 : 22)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: 24, style: .continuous)
-        .fill(DashboardTheme.panel)
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .fill(DashboardTheme.panelAlt)
         .overlay(
-          RoundedRectangle(cornerRadius: 24, style: .continuous)
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
             .stroke(DashboardTheme.border, lineWidth: 1)
         )
     )
@@ -1236,10 +1239,10 @@ struct PillBadge: View {
       .foregroundStyle(DashboardTheme.text)
       .padding(.horizontal, 12)
       .padding(.vertical, 7)
-      .background(tint.opacity(0.22))
+      .background(DashboardTheme.field)
       .overlay(
         Capsule()
-          .stroke(tint.opacity(0.45), lineWidth: 1)
+          .stroke(tint.opacity(0.38), lineWidth: 1)
       )
       .clipShape(Capsule())
   }
@@ -1254,9 +1257,9 @@ struct BannerCard: View {
     HStack(alignment: .top, spacing: 14) {
       Image(systemName: kind.icon)
         .font(.system(size: 18, weight: .bold))
-        .foregroundStyle(DashboardTheme.text)
+        .foregroundStyle(kind.tint)
         .frame(width: 36, height: 36)
-        .background(kind.tint.opacity(0.85))
+        .background(DashboardTheme.panelStrong)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
       VStack(alignment: .leading, spacing: 6) {
@@ -1274,135 +1277,94 @@ struct BannerCard: View {
     .padding(18)
     .background(
       RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .fill(kind.tint.opacity(0.12))
+        .fill(DashboardTheme.field)
         .overlay(
           RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(kind.tint.opacity(0.34), lineWidth: 1)
+            .stroke(kind.tint.opacity(0.30), lineWidth: 1)
         )
     )
   }
 }
 
+struct BrandMarkSquareView: View {
+  let image: NSImage?
+  let size: CGFloat
+  let cornerRadius: CGFloat
+
+  init(image: NSImage?, size: CGFloat, cornerRadius: CGFloat = 24) {
+    self.image = image
+    self.size = size
+    self.cornerRadius = cornerRadius
+  }
+
+  var body: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        .fill(DashboardTheme.panelStrong)
+        .overlay(
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+
+      if let image {
+        Image(nsImage: image)
+          .resizable()
+          .interpolation(.high)
+          .aspectRatio(contentMode: .fill)
+          .frame(width: size, height: size)
+          .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      } else {
+        Image(systemName: "app.dashed")
+          .font(.system(size: size * 0.24, weight: .semibold))
+          .foregroundStyle(DashboardTheme.subtle)
+      }
+    }
+    .frame(width: size, height: size)
+  }
+}
+
 struct HeaderPanel: View {
-  let icon: NSImage?
   let brandMark: NSImage?
-  let lockup: NSImage?
-  let hero: NSImage?
-  let lastSessionSummary: String?
-  let statusTitle: String
-  let statusKind: StatusKind
   let compact: Bool
 
   var body: some View {
-    Group {
-      if compact {
-        VStack(alignment: .leading, spacing: 18) {
-          titleBlock
-          statusBlock(alignment: .leading)
-        }
-      } else {
-        HStack(alignment: .center, spacing: 22) {
-          titleBlock
-          Spacer(minLength: 20)
-          statusBlock(alignment: .trailing)
-        }
-      }
-    }
-    .padding(24)
-    .background(
-      ZStack(alignment: .trailing) {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-          .fill(
-            LinearGradient(
-              colors: [DashboardTheme.panelStrong, DashboardTheme.panelAlt],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-          .overlay(
-          RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .stroke(DashboardTheme.border, lineWidth: 1)
-          )
+    ZStack(alignment: .topTrailing) {
+      HStack(spacing: 0) {
+        Color.clear
+          .frame(width: compact ? 120 : 200, height: 1)
 
-        if let hero {
-          Image(nsImage: hero)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
-            .frame(width: compact ? 240 : 360)
-            .opacity(0.14)
-            .padding(.trailing, compact ? 18 : 30)
-            .padding(.vertical, 6)
-            .allowsHitTesting(false)
-        }
-      }
-    )
-  }
-
-  @ViewBuilder
-  private var titleBlock: some View {
-    HStack(alignment: .center, spacing: 22) {
-      if let primaryMark = brandMark ?? icon {
-        Image(nsImage: primaryMark)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: compact ? 74 : 92, height: compact ? 74 : 92)
-          .shadow(color: .black.opacity(0.35), radius: 24, y: 14)
-      }
-
-      VStack(alignment: .leading, spacing: 10) {
-        Text("W.T.L.")
-          .font(.system(size: 14, weight: .semibold, design: .rounded))
-          .tracking(2.4)
-          .foregroundStyle(DashboardTheme.brightPink)
-
-        if let lockup {
-          Image(nsImage: lockup)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: compact ? 280 : 420, alignment: .leading)
-        } else {
+        VStack(alignment: .center, spacing: compact ? 8 : 10) {
           Text(appTitle)
             .font(.system(size: compact ? 28 : 34, weight: .bold, design: .rounded))
             .foregroundStyle(DashboardTheme.text)
+            .multilineTextAlignment(.center)
             .lineLimit(2)
+
+          Text("Provided by: \(companyName) · \(companyWebsite)")
+            .font(.system(size: compact ? 12 : 13, weight: .semibold, design: .rounded))
+            .foregroundStyle(DashboardTheme.muted)
+            .multilineTextAlignment(.center)
         }
+        .frame(maxWidth: .infinity)
 
-        Text("Professional GitHub Actions deletion and cleanup console for macOS.")
-          .font(.system(size: 14, weight: .medium, design: .rounded))
-          .foregroundStyle(DashboardTheme.muted)
-          .fixedSize(horizontal: false, vertical: true)
-
-        Text("Provided by \(companyName) · \(companyWebsite)")
-          .font(.system(size: 12, weight: .semibold, design: .rounded))
-          .foregroundStyle(DashboardTheme.subtle)
-          .fixedSize(horizontal: false, vertical: true)
+        BrandMarkSquareView(
+          image: brandMark,
+          size: compact ? 120 : 200,
+          cornerRadius: compact ? 20 : 26
+        )
       }
     }
-  }
-
-  @ViewBuilder
-  private func statusBlock(alignment: HorizontalAlignment) -> some View {
-    VStack(alignment: alignment, spacing: 12) {
-      HStack(spacing: 10) {
-        PillBadge(text: "Native SwiftUI", tint: DashboardTheme.deepBlue)
-        PillBadge(text: "CLI Engine", tint: DashboardTheme.success)
-        PillBadge(text: "Version \(appVersion)", tint: DashboardTheme.brightPink)
-      }
-
-      Text(statusTitle)
-        .font(.system(size: 13, weight: .bold, design: .rounded))
-        .foregroundStyle(statusKind.tint)
-        .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
-
-      if let lastSessionSummary {
-        Text(lastSessionSummary)
-          .font(.system(size: 12, weight: .medium, design: .rounded))
-          .foregroundStyle(DashboardTheme.subtle)
-          .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
-      }
-    }
+    .padding(.horizontal, 24)
+    .padding(.vertical, compact ? 18 : 20)
+    .frame(minHeight: compact ? 132 : 164)
+    .background(
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .fill(DashboardTheme.panel)
+        .overlay(
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+    )
   }
 }
 
@@ -1417,22 +1379,16 @@ struct DashboardShell<Content: View>: View {
     VStack(alignment: .leading, spacing: 20) {
       content
     }
-    .padding(20)
+    .padding(18)
     .background(
-      RoundedRectangle(cornerRadius: 30, style: .continuous)
-        .fill(
-          LinearGradient(
-            colors: [DashboardTheme.panel.opacity(0.94), DashboardTheme.panelAlt.opacity(0.92)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-          )
-        )
+      RoundedRectangle(cornerRadius: 24, style: .continuous)
+        .fill(DashboardTheme.panel)
         .overlay(
-          RoundedRectangle(cornerRadius: 30, style: .continuous)
+          RoundedRectangle(cornerRadius: 24, style: .continuous)
             .stroke(DashboardTheme.border, lineWidth: 1)
         )
     )
-    .shadow(color: .black.opacity(0.22), radius: 30, y: 20)
+    .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
   }
 }
 
@@ -1522,16 +1478,20 @@ struct DashboardButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 13, weight: .bold, design: .rounded))
-      .foregroundStyle(bordered ? DashboardTheme.text : DashboardTheme.panelStrong)
+      .foregroundStyle(DashboardTheme.text)
       .padding(.horizontal, 16)
       .padding(.vertical, 11)
       .background(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .fill(bordered ? tint.opacity(configuration.isPressed ? 0.55 : 0.82) : tint.opacity(configuration.isPressed ? 0.70 : 1.0))
+          .fill(
+            bordered
+              ? DashboardTheme.panelStrong.opacity(configuration.isPressed ? 0.88 : 1.0)
+              : tint.opacity(configuration.isPressed ? 0.82 : 1.0)
+          )
       )
       .overlay(
         RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(bordered ? tint.opacity(0.45) : tint.opacity(0.90), lineWidth: 1)
+          .stroke(bordered ? tint.opacity(0.72) : tint.opacity(0.95), lineWidth: 1)
       )
       .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
   }
@@ -1546,19 +1506,19 @@ struct SafetyCard: View {
       HStack(alignment: .top, spacing: 14) {
         Image(systemName: "exclamationmark.triangle.fill")
           .font(.system(size: 20, weight: .bold))
-          .foregroundStyle(DashboardTheme.text)
+          .foregroundStyle(DashboardTheme.warningSurface)
           .frame(width: 40, height: 40)
-          .background(DashboardTheme.danger)
+          .background(DashboardTheme.warningText)
           .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
         VStack(alignment: .leading, spacing: 6) {
           Text("Warning: Permanent Delete")
             .font(.system(size: 18, weight: .bold, design: .rounded))
-            .foregroundStyle(DashboardTheme.text)
+            .foregroundStyle(DashboardTheme.warningText)
 
           Text(dryRun ? "Dry run is enabled, but this app is built for destructive cleanup. Confirm the repo and account before you continue." : "This will permanently delete GitHub Actions data. Workflow runs, artifacts, caches, and disabled workflows cannot be restored.")
             .font(.system(size: 13, weight: .medium, design: .rounded))
-            .foregroundStyle(DashboardTheme.muted)
+            .foregroundStyle(DashboardTheme.warningSubtle)
             .lineSpacing(3)
         }
       }
@@ -1566,22 +1526,22 @@ struct SafetyCard: View {
       Toggle(isOn: $isArmed) {
         Text("Arm destructive cleanup")
           .font(.system(size: 14, weight: .bold, design: .rounded))
-          .foregroundStyle(DashboardTheme.text)
+          .foregroundStyle(DashboardTheme.warningText)
       }
       .toggleStyle(.switch)
-      .tint(DashboardTheme.danger)
+      .tint(DashboardTheme.deepBlue)
 
       Text(isArmed ? "Safety lock is OFF. Cleanup buttons are unlocked." : "Safety lock is ON. Turn this switch on before cleanup can run.")
         .font(.system(size: 12, weight: .semibold, design: .rounded))
-        .foregroundStyle(isArmed ? DashboardTheme.success : DashboardTheme.warning)
+        .foregroundStyle(isArmed ? DashboardTheme.warningText : DashboardTheme.warningSubtle)
     }
     .padding(20)
     .background(
       RoundedRectangle(cornerRadius: 24, style: .continuous)
-        .fill(DashboardTheme.cautionPanel)
+        .fill(DashboardTheme.warningSurface)
         .overlay(
           RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .stroke(DashboardTheme.danger.opacity(0.45), lineWidth: 1)
+            .stroke(DashboardTheme.warning.opacity(0.65), lineWidth: 1)
         )
     )
   }
@@ -1591,7 +1551,6 @@ struct LaunchWarningSheet: View {
   @Binding var acceptedRisk: Bool
   @Binding var acceptedPurpose: Bool
   let brandMark: NSImage?
-  let lockup: NSImage?
   let continueAction: () -> Void
   let quitAction: () -> Void
 
@@ -1609,46 +1568,12 @@ struct LaunchWarningSheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           HStack(alignment: .top, spacing: 18) {
-            ZStack {
-              RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                  LinearGradient(
-                    colors: [DashboardTheme.panelStrong, DashboardTheme.panelAlt],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                  )
-                )
-                .overlay(
-                  RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(DashboardTheme.border, lineWidth: 1)
-                )
-
-              if let brandMark {
-                Image(nsImage: brandMark)
-                  .resizable()
-                  .interpolation(.high)
-                  .aspectRatio(contentMode: .fit)
-                  .padding(10)
-              } else {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .font(.system(size: 28, weight: .bold))
-                  .foregroundStyle(DashboardTheme.text)
-              }
-            }
-            .frame(width: 84, height: 84)
+            BrandMarkSquareView(image: brandMark, size: 92, cornerRadius: 20)
 
             VStack(alignment: .leading, spacing: 8) {
               Text("Warning!")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(DashboardTheme.text)
-
-              if let lockup {
-                Image(nsImage: lockup)
-                  .resizable()
-                  .interpolation(.high)
-                  .aspectRatio(contentMode: .fit)
-                  .frame(maxWidth: 320, alignment: .leading)
-              }
 
               Text("This is a deletion tool. Use at your own risk.")
                 .font(.system(size: 17, weight: .bold, design: .rounded))
@@ -1661,6 +1586,7 @@ struct LaunchWarningSheet: View {
 
               Link(companyWebsite, destination: URL(string: companyWebsiteURL)!)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .tint(DashboardTheme.link)
             }
           }
 
@@ -1703,7 +1629,7 @@ struct LaunchWarningSheet: View {
             Button("Accept and Continue") {
               continueAction()
             }
-            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.danger, bordered: false))
+            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: false))
             .disabled(!(acceptedRisk && acceptedPurpose))
           }
 
@@ -1734,8 +1660,8 @@ struct LogConsoleView: NSViewRepresentable {
     textView.isEditable = false
     textView.isSelectable = true
     textView.drawsBackground = true
-    textView.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.13, alpha: 1)
-    textView.textColor = NSColor(calibratedRed: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+    textView.backgroundColor = NSColor(calibratedRed: 20 / 255, green: 28 / 255, blue: 38 / 255, alpha: 1)
+    textView.textColor = NSColor(calibratedRed: 247 / 255, green: 248 / 255, blue: 250 / 255, alpha: 1)
     textView.insertionPointColor = .clear
     textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     textView.textContainerInset = NSSize(width: 12, height: 12)
@@ -1749,8 +1675,8 @@ struct LogConsoleView: NSViewRepresentable {
   func updateNSView(_ nsView: NSScrollView, context: Context) {
     guard let textView = nsView.documentView as? NSTextView else { return }
     textView.string = text
-    textView.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.13, alpha: 1)
-    textView.textColor = NSColor(calibratedRed: 0.94, green: 0.97, blue: 0.99, alpha: 1)
+    textView.backgroundColor = NSColor(calibratedRed: 20 / 255, green: 28 / 255, blue: 38 / 255, alpha: 1)
+    textView.textColor = NSColor(calibratedRed: 247 / 255, green: 248 / 255, blue: 250 / 255, alpha: 1)
     textView.scrollToEndOfDocument(nil)
   }
 }
@@ -1779,13 +1705,7 @@ struct ContentView: View {
           VStack(spacing: 18) {
             DashboardShell {
               HeaderPanel(
-                icon: model.bundledIcon,
                 brandMark: model.bundledBrandMark,
-                lockup: model.bundledLockup,
-                hero: model.bundledHero,
-                lastSessionSummary: model.lastSessionSummary,
-                statusTitle: model.statusTitle,
-                statusKind: model.statusKind,
                 compact: contentWidth < 1280
               )
 
@@ -1800,12 +1720,12 @@ struct ContentView: View {
     }
     .frame(minWidth: 760, minHeight: 640)
     .preferredColorScheme(.dark)
+    .tint(DashboardTheme.link)
     .sheet(isPresented: $showLaunchWarning) {
       LaunchWarningSheet(
         acceptedRisk: $acceptedRisk,
         acceptedPurpose: $acceptedPurpose,
         brandMark: model.bundledBrandMark,
-        lockup: model.bundledLockup,
         continueAction: {
           showLaunchWarning = false
         },

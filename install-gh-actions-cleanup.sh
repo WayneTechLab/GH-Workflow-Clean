@@ -25,7 +25,7 @@ SOURCE_TOS="${SCRIPT_DIR}/TERMS-OF-SERVICE.md"
 SOURCE_HELP_DIR="${SCRIPT_DIR}/docs"
 SOURCE_PROJECT_INFO="${SCRIPT_DIR}/macos/PROJECT-INFO.md"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.2.0}"
+APP_VERSION="${APP_VERSION:-0.2.1}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -196,26 +196,28 @@ render_icon_icns() {
   local tmpdir=""
   local iconset_dir=""
   local icns_path=""
+  local cropped_png=""
+  local size=""
+  local double_size=""
 
   require_command iconutil
+  require_command sips
 
-  [[ -d "$SOURCE_ICONSET_DIR" ]] || die "Cannot find AppIcon.appiconset at $SOURCE_ICONSET_DIR"
+  [[ -f "$SOURCE_LOGO_CARD" ]] || die "Cannot find logo source at $SOURCE_LOGO_CARD"
 
   tmpdir="$(mktemp -d /tmp/gh-actions-cleanup-icon.XXXXXX)"
   register_temp_dir "$tmpdir"
+  cropped_png="$tmpdir/logo-card-cropped.png"
+
+  sips -c 840 840 "$SOURCE_LOGO_CARD" --out "$cropped_png" >/dev/null
 
   iconset_dir="$tmpdir/AppIcon.iconset"
   mkdir -p "$iconset_dir"
-  cp "$SOURCE_ICONSET_DIR/appicon-16x16@1x.png" "$iconset_dir/icon_16x16.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-16x16@2x.png" "$iconset_dir/icon_16x16@2x.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-32x32@1x.png" "$iconset_dir/icon_32x32.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-32x32@2x.png" "$iconset_dir/icon_32x32@2x.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-128x128@1x.png" "$iconset_dir/icon_128x128.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-128x128@2x.png" "$iconset_dir/icon_128x128@2x.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-256x256@1x.png" "$iconset_dir/icon_256x256.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-256x256@2x.png" "$iconset_dir/icon_256x256@2x.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-512x512@1x.png" "$iconset_dir/icon_512x512.png"
-  cp "$SOURCE_ICONSET_DIR/appicon-512x512@2x.png" "$iconset_dir/icon_512x512@2x.png"
+  for size in 16 32 128 256 512; do
+    double_size=$((size * 2))
+    sips -z "$size" "$size" "$cropped_png" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null
+    sips -z "$double_size" "$double_size" "$cropped_png" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null
+  done
 
   icns_path="$tmpdir/AppIcon.icns"
   iconutil -c icns "$iconset_dir" -o "$icns_path" >/dev/null
