@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GitHub (Action) Clean-UP Tool"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.1"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -438,6 +438,7 @@ final class CleanupViewModel: ObservableObject {
       DispatchQueue.main.async {
         self.reloadAuthInventory()
         let cleaned = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedCleaned = redactSensitiveText(cleaned)
         let resolvedAccount = self.account.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.status == 0 {
           self.isAuthenticated = !resolvedAccount.isEmpty || self.selectedHostConfig?.activeUser != nil
@@ -446,18 +447,18 @@ final class CleanupViewModel: ObservableObject {
           }
           self.statusKind = .ready
           self.statusTitle = "GH TOKEN LOGGED IN @ \(selectedHost)"
-          self.statusDetail = cleaned.isEmpty
+          self.statusDetail = sanitizedCleaned.isEmpty
             ? "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready."
-            : "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready.\n\(cleaned)"
+            : "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready.\n\(sanitizedCleaned)"
           self.fetchAvailableRepos()
         } else {
           self.isAuthenticated = false
           self.clearRepoCatalog(resetOwner: false)
           self.statusKind = .warning
           self.statusTitle = "GH TOKEN NOT LOGGED IN @ \(selectedHost)"
-          self.statusDetail = cleaned.isEmpty
+          self.statusDetail = sanitizedCleaned.isEmpty
             ? "Run gh auth login -h \(selectedHost) before cleanup."
-            : cleaned
+            : sanitizedCleaned
         }
       }
     }
@@ -619,13 +620,14 @@ final class CleanupViewModel: ObservableObject {
       DispatchQueue.main.async {
         self.isLoadingRepos = false
         let cleaned = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedCleaned = redactSensitiveText(cleaned)
 
         guard result.status == 0 else {
           self.availableRepos = []
           self.selectedRepos.removeAll()
-          self.repoCatalogStatus = cleaned.isEmpty
+          self.repoCatalogStatus = sanitizedCleaned.isEmpty
             ? "Failed to load repositories for \(targetOwner)."
-            : cleaned
+            : sanitizedCleaned
           return
         }
 
@@ -860,7 +862,7 @@ final class CleanupViewModel: ObservableObject {
   }
 
   private func appendLog(_ text: String) {
-    logText += text
+    logText += redactSensitiveText(text)
   }
 
   private func loadLastSession() -> [String: String] {
@@ -1043,6 +1045,29 @@ private func bundledTermsOfServiceText() -> String {
   }
 
   return contents
+}
+
+private func redactSensitiveText(_ text: String) -> String {
+  let replacements: [(pattern: String, replacement: String)] = [
+    ("ghp_[A-Za-z0-9]{20,}", "[REDACTED_GITHUB_TOKEN]"),
+    ("github_pat_[A-Za-z0-9_]{20,}", "[REDACTED_GITHUB_TOKEN]"),
+    ("gho_[A-Za-z0-9]{20,}", "[REDACTED_GITHUB_TOKEN]"),
+    ("AKIA[0-9A-Z]{16}", "[REDACTED_AWS_KEY]"),
+    ("AIza[0-9A-Za-z\\-_]{20,}", "[REDACTED_API_KEY]"),
+    ("(?i)authorization:\\s*bearer\\s+[A-Za-z0-9._\\-]+", "Authorization: Bearer [REDACTED]"),
+    ("(?i)(gh_token|github_token|access_token|client_secret|api_key)\\s*[:=]\\s*[^\\s\\n]+", "$1=[REDACTED]")
+  ]
+
+  var sanitized = text
+  for item in replacements {
+    guard let regex = try? NSRegularExpression(pattern: item.pattern, options: []) else {
+      continue
+    }
+    let range = NSRange(sanitized.startIndex..., in: sanitized)
+    sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: range, withTemplate: item.replacement)
+  }
+
+  return sanitized
 }
 
 private enum DashboardTheme {

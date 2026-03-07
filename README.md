@@ -6,7 +6,7 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.1.0`
+Current release: `0.1.1`
 
 ## Warning
 
@@ -56,6 +56,7 @@ open "/Applications/GitHub (Action) Clean-UP Tool.app"
 - keeps the CLI as the cleanup engine under the native GUI
 - stores only the last host, account, and repo for convenience
 - does not store GitHub tokens
+- redacts common token and key patterns from the native app log panel
 
 ## macOS App
 
@@ -192,6 +193,7 @@ gh-actions-cleanup --repo OWNER/REPO --delete-caches --yes
 - Copyright (c) 2026 Wayne Tech Lab LLC
 - provided as-is, without warranties or guarantees of any kind
 - see [LICENSE](LICENSE)
+- see [SECURITY.md](SECURITY.md)
 - see [TERMS-OF-SERVICE.md](TERMS-OF-SERVICE.md)
 
 ## Creator
