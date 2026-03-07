@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.5"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.7"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -111,6 +111,7 @@ enum StatusKind {
 
 private enum AppDestination: String, CaseIterable, Identifiable {
   case controlCenter
+  case settings
   case helpCenter
   case terms
   case security
@@ -124,6 +125,7 @@ private enum AppDestination: String, CaseIterable, Identifiable {
   var title: String {
     switch self {
     case .controlCenter: return "Control Center"
+    case .settings: return "Settings"
     case .helpCenter: return "Help Center"
     case .terms: return "Terms of Service"
     case .security: return "Security Notes"
@@ -138,6 +140,8 @@ private enum AppDestination: String, CaseIterable, Identifiable {
     switch self {
     case .controlCenter:
       return "Primary cleanup workspace for GitHub auth, repository targeting, safety, and execution."
+    case .settings:
+      return "GitHub host, account, login state, and session controls."
     case .helpCenter:
       return "Operational guidance, safety model, target selection rules, and first-run workflow."
     case .terms:
@@ -158,6 +162,7 @@ private enum AppDestination: String, CaseIterable, Identifiable {
   var icon: String {
     switch self {
     case .controlCenter: return "switch.2"
+    case .settings: return "gearshape"
     case .helpCenter: return "questionmark.circle"
     case .terms: return "checklist"
     case .security: return "lock.shield"
@@ -171,6 +176,7 @@ private enum AppDestination: String, CaseIterable, Identifiable {
   var tint: Color {
     switch self {
     case .controlCenter: return DashboardTheme.accent
+    case .settings: return DashboardTheme.warning
     case .helpCenter: return DashboardTheme.success
     case .terms: return DashboardTheme.warning
     case .security: return DashboardTheme.deepBlue
@@ -183,6 +189,8 @@ private enum AppDestination: String, CaseIterable, Identifiable {
 
   var bundleDocumentName: String? {
     switch self {
+    case .settings:
+      return nil
     case .helpCenter: return "Help-Center.md"
     case .terms: return "TERMS-OF-SERVICE.md"
     case .security: return "SECURITY.md"
@@ -205,7 +213,7 @@ private enum AppDestination: String, CaseIterable, Identifiable {
   }
 }
 
-private let workspaceDestinations: [AppDestination] = [.controlCenter, .about]
+private let workspaceDestinations: [AppDestination] = [.controlCenter, .settings, .about]
 private let knowledgeDestinations: [AppDestination] = [.helpCenter, .terms, .security, .brandSystem, .macOSNotes, .projectInfo]
 
 @MainActor
@@ -1631,14 +1639,54 @@ private struct WorkspaceToolbarStrip: View {
   }
 }
 
+private struct StatusBarActionButton: View {
+  let title: String
+  let systemImage: String
+  let tint: Color
+  let isDisabled: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 6) {
+        Image(systemName: systemImage)
+          .font(.system(size: 11, weight: .bold))
+        Text(title)
+          .font(.system(size: 11, weight: .bold, design: .rounded))
+      }
+      .foregroundStyle(DashboardTheme.text)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 7)
+      .background(
+        Capsule()
+          .fill(DashboardTheme.field)
+          .overlay(
+            Capsule()
+              .stroke(tint.opacity(0.55), lineWidth: 1)
+          )
+      )
+    }
+    .buttonStyle(.plain)
+    .disabled(isDisabled)
+    .opacity(isDisabled ? 0.55 : 1.0)
+  }
+}
+
 private struct BottomStatusBar: View {
   let kind: StatusKind
   let status: String
   let session: String
   let selection: String
   let destination: AppDestination
+  let compact: Bool
+  let isAuthenticated: Bool
+  let isLoggingOut: Bool
+  let refreshAction: () -> Void
+  let loginAction: () -> Void
+  let logoutAction: () -> Void
+  let settingsAction: () -> Void
 
-  var body: some View {
+  private var statusLine: some View {
     HStack(spacing: 10) {
       Image(systemName: kind.icon)
         .font(.system(size: 12, weight: .bold))
@@ -1673,6 +1721,35 @@ private struct BottomStatusBar: View {
       Spacer(minLength: 0)
 
       PillBadge(text: destination.title, tint: destination.tint)
+    }
+  }
+
+  private var actionLine: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        StatusBarActionButton(title: "Refresh", systemImage: "arrow.clockwise", tint: DashboardTheme.accent, isDisabled: false, action: refreshAction)
+        StatusBarActionButton(title: isAuthenticated ? "Re-Login" : "Login", systemImage: "person.crop.circle.badge.checkmark", tint: DashboardTheme.success, isDisabled: false, action: loginAction)
+        StatusBarActionButton(title: "Logout", systemImage: "rectangle.portrait.and.arrow.right", tint: DashboardTheme.warning, isDisabled: !isAuthenticated || isLoggingOut, action: logoutAction)
+        StatusBarActionButton(title: "Settings", systemImage: "gearshape", tint: DashboardTheme.link, isDisabled: false, action: settingsAction)
+      }
+      .padding(.horizontal, 2)
+    }
+    .frame(maxWidth: compact ? .infinity : 430, alignment: .trailing)
+  }
+
+  var body: some View {
+    Group {
+      if compact {
+        VStack(alignment: .leading, spacing: 10) {
+          statusLine
+          actionLine
+        }
+      } else {
+        HStack(spacing: 12) {
+          statusLine
+          actionLine
+        }
+      }
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
@@ -2172,7 +2249,22 @@ struct ContentView: View {
             status: model.statusCompactLabel,
             session: model.sessionCompactLabel,
             selection: model.selectionCompactLabel,
-            destination: selectedDestination
+            destination: selectedDestination,
+            compact: geometry.size.width < 1880,
+            isAuthenticated: model.isAuthenticated,
+            isLoggingOut: model.isLoggingOut,
+            refreshAction: {
+              model.refreshAuthStatus()
+            },
+            loginAction: {
+              model.openGitHubLogin()
+            },
+            logoutAction: {
+              model.logoutSelectedAccount()
+            },
+            settingsAction: {
+              selectedDestination = .settings
+            }
           )
         }
         .padding(16)
@@ -2204,6 +2296,8 @@ struct ContentView: View {
         switch selectedDestination {
         case .controlCenter:
           controlCenterPage(for: width, usesSidebar: usesSidebar)
+        case .settings:
+          settingsPage(for: width, usesSidebar: usesSidebar)
         case .about:
           aboutPage(usesSidebar: usesSidebar)
         case .helpCenter, .terms, .security, .brandSystem, .macOSNotes, .projectInfo:
@@ -2231,6 +2325,25 @@ struct ContentView: View {
       }
 
       dashboardLayout(for: width)
+    }
+  }
+
+  private func settingsPage(for width: CGFloat, usesSidebar: Bool) -> some View {
+    DashboardShell {
+      HeaderPanel(
+        brandMark: model.bundledBrandMark,
+        compact: width < 1280
+      )
+
+      WorkspaceToolbarStrip(
+        destination: .settings,
+        menuVisible: isMenuVisible,
+        usesSidebar: usesSidebar
+      ) {
+        isMenuVisible.toggle()
+      }
+
+      settingsLayout(for: width)
     }
   }
 
@@ -2289,7 +2402,7 @@ struct ContentView: View {
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundStyle(DashboardTheme.text)
 
-              Text("This screen stays inside the native app. Use the left-side menu or the compact top menu to move between Help, Terms, Security, Brand, and project pages without external file popups.")
+              Text("This screen stays inside the native app. Use the app menu to move between Control Center, Settings, Help, Terms, Security, Brand, and project pages without external file popups.")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(DashboardTheme.muted)
                 .lineSpacing(3)
@@ -2333,14 +2446,13 @@ struct ContentView: View {
   private func dashboardLayout(for width: CGFloat) -> some View {
     if width >= 2100 {
       HStack(alignment: .top, spacing: 18) {
-        authPanel
-          .frame(maxWidth: .infinity, alignment: .topLeading)
-
         repositoryPanel
           .frame(maxWidth: .infinity, alignment: .topLeading)
 
+        cleanupPanel
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+
         VStack(alignment: .leading, spacing: 18) {
-          cleanupPanel
           executionPanel
           libraryPanel
         }
@@ -2351,11 +2463,8 @@ struct ContentView: View {
       }
     } else if width >= 1560 {
       HStack(alignment: .top, spacing: 18) {
-        VStack(alignment: .leading, spacing: 18) {
-          authPanel
-          repositoryPanel
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        repositoryPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
 
         VStack(alignment: .leading, spacing: 18) {
           cleanupPanel
@@ -2370,7 +2479,7 @@ struct ContentView: View {
     } else if width >= 1160 {
       VStack(alignment: .leading, spacing: 18) {
         HStack(alignment: .top, spacing: 18) {
-          authPanel
+          repositoryPanel
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
           VStack(alignment: .leading, spacing: 18) {
@@ -2381,12 +2490,10 @@ struct ContentView: View {
           .frame(maxWidth: .infinity, alignment: .topLeading)
         }
 
-        repositoryPanel
         logPanel(minHeight: 440)
       }
     } else {
       VStack(alignment: .leading, spacing: 18) {
-        authPanel
         repositoryPanel
         cleanupPanel
         executionPanel
@@ -2396,8 +2503,47 @@ struct ContentView: View {
     }
   }
 
-  private var authPanel: some View {
-    PanelCard(title: "GitHub Auth", subtitle: "Clear account state, login controls, and fixed-value handling.") {
+  @ViewBuilder
+  private func settingsLayout(for width: CGFloat) -> some View {
+    if width >= 1880 {
+      HStack(alignment: .top, spacing: 18) {
+        settingsPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        settingsInfoPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        libraryPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+      }
+    } else if width >= 1320 {
+      HStack(alignment: .top, spacing: 18) {
+        settingsPanel
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+
+        VStack(alignment: .leading, spacing: 18) {
+          settingsInfoPanel
+          libraryPanel
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+      }
+    } else {
+      VStack(alignment: .leading, spacing: 18) {
+        settingsPanel
+        settingsInfoPanel
+        libraryPanel
+      }
+    }
+  }
+
+  private var settingsPanel: some View {
+    PanelCard(title: "GitHub Settings", subtitle: "Host, account, and session controls now live here instead of on the home dashboard.") {
+      BannerCard(
+        title: model.authHeadline,
+        detail: model.authSummary,
+        kind: model.isAuthenticated ? .ready : .warning
+      )
+
       FixedValueRow(label: "Current GitHub Session", value: model.sessionCompactLabel)
 
       if model.availableHosts.count > 1 {
@@ -2444,10 +2590,18 @@ struct ContentView: View {
         FixedValueRow(label: "Authenticated Account", value: "No logged-in account found for this host")
       }
 
-      Text("Account state is mirrored in the bottom status bar. Refresh or re-login here only when you need to change the active GitHub session.")
+      Text(model.authActionHint)
         .font(.system(size: 12, weight: .medium, design: .rounded))
         .foregroundStyle(DashboardTheme.muted)
         .lineSpacing(2)
+
+      if !model.statusDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        Text(model.statusDetail)
+          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.subtle)
+          .lineSpacing(2)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
 
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 10) {
@@ -2467,6 +2621,42 @@ struct ContentView: View {
         }
         .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
         .disabled(!model.isAuthenticated || model.isLoggingOut || model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+  }
+
+  private var settingsInfoPanel: some View {
+    PanelCard(title: "Session and Tooling", subtitle: "Operational details, stored session state, and direct utility actions for the native app.") {
+      FixedValueRow(label: "Current Status", value: model.statusCompactLabel)
+
+      if let lastSessionSummary = model.lastSessionSummary {
+        FixedValueRow(label: "Last Session", value: lastSessionSummary)
+      }
+
+      FixedValueRow(label: "Bundled CLI Engine", value: model.cliPath ?? "Bundled CLI not found")
+      FixedValueRow(label: "GitHub CLI", value: model.ghPath ?? "GitHub CLI not found")
+      FixedValueRow(label: "Local Session Storage", value: appSupportDir)
+
+      Text("Quick login controls are always available from the bottom status bar. Use this page for full host and account management without crowding the Control Center.")
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineSpacing(2)
+
+      HStack(spacing: 10) {
+        Button("Open CLI") {
+          model.openCLIInTerminal()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+
+        Button("Reveal Session Storage") {
+          model.revealSessionStorage()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+
+        Button("Open Website") {
+          model.openCompanyWebsite()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: true))
       }
     }
   }
@@ -2657,7 +2847,7 @@ struct ContentView: View {
   }
 
   private var libraryPanel: some View {
-    PanelCard(title: "In-App Pages", subtitle: "Navigate to Help, Terms, Security, Brand, project notes, and About without leaving the app window.") {
+    PanelCard(title: "In-App Pages", subtitle: "Navigate to Settings, Help, Terms, Security, Brand, project notes, and About without leaving the app window.") {
       BannerCard(
         title: selectedDestination == .controlCenter ? "Control Center Active" : "\(selectedDestination.title) Active",
         detail: "Use the app menu to move between bundled pages. Documentation and product info now live inside the native interface instead of opening external markdown windows.",
@@ -2665,7 +2855,7 @@ struct ContentView: View {
       )
 
       LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 10)], spacing: 10) {
-        ForEach(knowledgeDestinations + [.about]) { destination in
+        ForEach([.settings] + knowledgeDestinations + [.about]) { destination in
           DestinationShortcutTile(
             destination: destination,
             isSelected: selectedDestination == destination

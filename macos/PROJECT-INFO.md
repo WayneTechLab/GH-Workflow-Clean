@@ -7,6 +7,7 @@
 - Bundle ID: `com.waynetechlab.ghworkflowclean`
 - Category: `public.app-category.developer-tools`
 - Minimum macOS: `12.0`
+- Current release: `0.2.7`
 
 ## Brand Sources
 
@@ -24,9 +25,19 @@ The installer bundles:
 - `logo-horizontal-lockup.png`
 - `logo-card-square.png`
 - `hero-2560x1600.png`
+- `CHANGELOG.md`
 - Terms of Service
 - Help markdown files from `docs/`
 - repo-level support docs such as `README.md` and `SECURITY.md`
+
+## UI structure
+
+The native app currently uses:
+
+- `Control Center` for cleanup targeting and execution
+- `Settings` for GitHub host/account/session controls
+- a lower status bar for live session state and quick auth actions
+- bundled in-app documentation pages instead of external markdown popups
 
 ## Xcode Notes
 

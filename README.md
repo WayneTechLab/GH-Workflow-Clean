@@ -19,7 +19,7 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.2.5`
+Current release: `0.2.7`
 
 ## Warning
 
@@ -55,6 +55,10 @@ Or open the native app:
 open "/Applications/GH Workflow Clean.app"
 ```
 
+Release log:
+
+- [CHANGELOG.md](CHANGELOG.md)
+
 ## What It Does
 
 - checks GitHub CLI authentication status first
@@ -70,6 +74,8 @@ open "/Applications/GH Workflow Clean.app"
 - includes a native in-app multi-page menu for Help, Terms, Security, Brand, Project Info, and About
 - lets the app menu be hidden or shown for focus mode on wide and narrow screens
 - moves GitHub session and run state into a streamlined bottom status bar
+- moves refresh, login, logout, and settings access into the lower status bar for one-click account control
+- keeps full GitHub host/account/session controls on a dedicated Settings page instead of crowding the home dashboard
 - preserves the official square app icon without crop or resample drift by using the shipped AppIcon set directly
 - stores only the last host, account, and repo for convenience
 - does not store GitHub tokens
@@ -90,8 +96,9 @@ The native app includes:
 - screen-aware launch sizing for large and small displays
 - bundled production brand artwork from the supplied press kit
 - a repository browser with search, checkmarks, and select-all
-- login status visibility for the selected GitHub account
-- logout action for the selected account
+- a cleaner Control Center with auth moved out of the home workspace
+- a dedicated Settings page for GitHub host, account, session, and login controls
+- a lower status bar with refresh, login, logout, and direct settings access
 - a safety arm switch before destructive execution
 - a live high-contrast output console
 - an every-launch warning and Terms of Service acceptance screen

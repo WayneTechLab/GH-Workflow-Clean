@@ -14,16 +14,34 @@ It can:
 - delete workflow runs
 - delete artifacts
 - delete caches
+- keep quick auth actions in the lower status bar
+- move full GitHub host and account controls to a dedicated `Settings` page
 
 ## Safe First Run
 
 1. Install GitHub CLI if it is not already present.
 2. Authenticate with `gh auth login -h github.com`.
 3. Open the app and review the warning screen.
-4. Select the correct GitHub host and account.
+4. Confirm the current session in the lower status bar or open `Settings`.
 5. Load repositories and verify the target list.
 6. Turn on `Dry run only` first.
 7. Review the live output before using destructive cleanup.
+
+## Navigation Model
+
+The app now uses a cleaner two-layer workflow:
+
+- `Control Center` for repository targeting, cleanup scope, execution, and logs
+- `Settings` for GitHub host, account, login, logout, and session management
+
+The bottom status bar stays visible and provides:
+
+- current GitHub session state
+- selected repo target summary
+- `Refresh`
+- `Login` or `Re-Login`
+- `Logout`
+- direct `Settings` access
 
 ## Repository Selection
 
@@ -71,10 +89,12 @@ It does not intentionally store GitHub tokens.
 Bundled help content includes:
 
 - README
+- CHANGELOG
 - Terms of Service
 - Security Notes
 - Brand System
 - macOS App Notes
+- Project Info
 - Metadata and press-kit files
 
 ## Support

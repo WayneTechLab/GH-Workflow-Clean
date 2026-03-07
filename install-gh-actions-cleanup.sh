@@ -20,13 +20,14 @@ SOURCE_LOGO_CARD="${SCRIPT_DIR}/assets/logos/logo-card-square.png"
 SOURCE_LOGO_LOCKUP="${SCRIPT_DIR}/assets/logos/logo-horizontal-lockup.png"
 SOURCE_HERO="${SCRIPT_DIR}/assets/social/hero-2560x1600.png"
 SOURCE_README="${SCRIPT_DIR}/README.md"
+SOURCE_CHANGELOG="${SCRIPT_DIR}/CHANGELOG.md"
 SOURCE_SECURITY="${SCRIPT_DIR}/SECURITY.md"
 SOURCE_LICENSE="${SCRIPT_DIR}/LICENSE"
 SOURCE_TOS="${SCRIPT_DIR}/TERMS-OF-SERVICE.md"
 SOURCE_HELP_DIR="${SCRIPT_DIR}/docs"
 SOURCE_PROJECT_INFO="${SCRIPT_DIR}/macos/PROJECT-INFO.md"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.2.5}"
+APP_VERSION="${APP_VERSION:-0.2.7}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -385,6 +386,7 @@ copy_help_resources() {
   mkdir -p "$help_dir"
 
   copy_file_if_present "$SOURCE_README" "$help_dir/README.md"
+  copy_file_if_present "$SOURCE_CHANGELOG" "$help_dir/CHANGELOG.md"
   copy_file_if_present "$SOURCE_SECURITY" "$help_dir/SECURITY.md"
   copy_file_if_present "$SOURCE_LICENSE" "$help_dir/LICENSE"
   copy_file_if_present "$SOURCE_TOS" "$help_dir/TERMS-OF-SERVICE.md"
@@ -451,6 +453,9 @@ install_app_bundle() {
   printf "%s\n" "$APP_VERSION" > "$resources_dir/VERSION"
   if [[ -f "$SOURCE_TOS" ]]; then
     cp "$SOURCE_TOS" "$resources_dir/TERMS-OF-SERVICE.md"
+  fi
+  if [[ -f "$SOURCE_CHANGELOG" ]]; then
+    cp "$SOURCE_CHANGELOG" "$resources_dir/CHANGELOG.md"
   fi
   copy_file_if_present "$SOURCE_LOGO_CARD" "$resources_dir/logo-card-square.png"
   copy_file_if_present "$SOURCE_LOGO_LOCKUP" "$resources_dir/logo-horizontal-lockup.png"

@@ -11,6 +11,17 @@ Use `assets/favicon/favicon.ico` and PNG variants for web.
 Use `assets/dmg-background.png` as the DMG background starter.
 The native installer converts the shipped AppIcon set into `AppIcon.icns` for Finder and Dock.
 
+## Current UI model
+
+The native app now uses:
+
+- `Control Center` as the primary cleanup workspace
+- `Settings` as the dedicated GitHub host/account/session page
+- a lower status bar for fast `Refresh`, `Login`, `Logout`, and `Settings` access
+- a collapsible app menu for in-app pages and focus mode
+
+This keeps the home workspace cleaner while preserving one-click access to auth controls.
+
 ## Social / website
 Use:
 - `assets/social/hero-2560x1600.png`
