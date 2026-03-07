@@ -1,4 +1,17 @@
-# GitHub (Action) Clean-UP Tool
+<p align="center">
+  <img src="assets/logos/logo-horizontal-lockup.png" alt="GH Workflow Clean" width="560">
+</p>
+
+<p align="center">
+  <img src="assets/social/social-banner-2400x900.png" alt="GH Workflow Clean banner" width="960">
+</p>
+
+<p align="center">
+  Professional GitHub Actions cleanup software for macOS.<br>
+  Provided by Wayne Tech Lab LLC · <a href="https://www.WayneTechLab.com">www.WayneTechLab.com</a>
+</p>
+
+# GH Workflow Clean
 
 Professional GitHub Actions cleanup software for macOS.
 
@@ -6,13 +19,13 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.1.1`
+Current release: `0.2.0`
 
 ## Warning
 
 This is a deletion tool. Use at your own risk.
 
-GitHub (Action) Clean-UP Tool can permanently delete:
+GH Workflow Clean can permanently delete:
 
 - workflow runs
 - artifacts
@@ -39,7 +52,7 @@ gh-actions-cleanup
 Or open the native app:
 
 ```bash
-open "/Applications/GitHub (Action) Clean-UP Tool.app"
+open "/Applications/GH Workflow Clean.app"
 ```
 
 ## What It Does
@@ -63,19 +76,21 @@ open "/Applications/GitHub (Action) Clean-UP Tool.app"
 The project ships two interfaces:
 
 - `gh-actions-cleanup`
-- a native SwiftUI macOS app: `GitHub (Action) Clean-UP Tool.app`
+- a native SwiftUI macOS app: `GH Workflow Clean.app`
 
 The native app includes:
 
 - a responsive single-shell SwiftUI layout
 - ultrawide, desktop, compact, and narrow breakpoints
 - screen-aware launch sizing for large and small displays
+- bundled production brand artwork from the supplied press kit
 - a repository browser with search, checkmarks, and select-all
 - login status visibility for the selected GitHub account
 - logout action for the selected account
 - a safety arm switch before destructive execution
 - a live high-contrast output console
 - an every-launch warning and Terms of Service acceptance screen
+- bundled help and project info files directly inside the app
 
 ## Terms of Service
 
@@ -113,8 +128,9 @@ Installer behavior:
 - removes older app bundles before reinstalling
 - installs the CLI into a writable macOS bin directory
 - installs the app into `/Applications` when writable, otherwise `~/Applications`
-- generates the app icon during install
+- builds the native Finder/Dock icon from the shipped `AppIcon.appiconset`
 - bundles the current version and Terms of Service into the app
+- bundles help files, security notes, brand docs, and project info into the app
 - uses the existing `gh` keychain session instead of storing tokens itself
 
 ## Common Commands
@@ -184,9 +200,17 @@ gh-actions-cleanup --repo OWNER/REPO --delete-caches --yes
 - if multiple accounts are authenticated on one host, the CLI can switch and restore the previous account
 - the tool does not print, export, or store GitHub tokens
 - the token in use needs repository and workflow permissions
-- the tool stores only the last host, account, and repo in `~/Library/Application Support/GitHub Action Clean-Up Tool/last-session.env`
-- the app can read the legacy last-session path from older versions
+- the tool stores only the last host, account, and repo in `~/Library/Application Support/GH Workflow Clean/last-session.env`
+- the app can read the legacy last-session path from older versions at `~/Library/Application Support/GitHub Action Clean-Up Tool/last-session.env`
 - `--dry-run` is the safest way to validate cleanup scope before deleting anything
+
+## Brand and Packaging Sources
+
+- brand system: [docs/Brand-System.md](docs/Brand-System.md)
+- macOS app notes: [docs/macOS-App-Notes.md](docs/macOS-App-Notes.md)
+- press kit: [docs/Press-Kit.md](docs/Press-Kit.md)
+- help center: [docs/Help-Center.md](docs/Help-Center.md)
+- Xcode and bundle metadata: [macos/PROJECT-INFO.md](macos/PROJECT-INFO.md)
 
 ## Legal
 

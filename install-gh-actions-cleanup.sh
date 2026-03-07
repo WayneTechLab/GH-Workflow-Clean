@@ -3,19 +3,29 @@
 set -euo pipefail
 
 APP_NAME="gh-actions-cleanup"
-APP_DISPLAY_NAME="GitHub (Action) Clean-UP Tool"
+APP_DISPLAY_NAME="GH Workflow Clean"
 APP_BUNDLE_NAME="${APP_DISPLAY_NAME}.app"
 APP_BUNDLE_ID="com.waynetechlab.ghworkflowclean"
 APP_EXECUTABLE_NAME="GHWorkflowCleanGUI"
-LEGACY_APP_BUNDLE_NAMES=("GH Workflow Clean.app")
+COPYRIGHT_TEXT="Copyright 2026 Wayne Tech Lab LLC"
+LEGACY_APP_BUNDLE_NAMES=("GitHub (Action) Clean-UP Tool.app")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
 SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
-SOURCE_ICON="${SCRIPT_DIR}/assets/app-icon.svg"
+SOURCE_INFO_PLIST_TEMPLATE="${SCRIPT_DIR}/macos/Info.plist.template"
+SOURCE_ICONSET_DIR="${SCRIPT_DIR}/assets/AppIcon.appiconset"
+SOURCE_LOGO_CARD="${SCRIPT_DIR}/assets/logos/logo-card-square.png"
+SOURCE_LOGO_LOCKUP="${SCRIPT_DIR}/assets/logos/logo-horizontal-lockup.png"
+SOURCE_HERO="${SCRIPT_DIR}/assets/social/hero-2560x1600.png"
+SOURCE_README="${SCRIPT_DIR}/README.md"
+SOURCE_SECURITY="${SCRIPT_DIR}/SECURITY.md"
+SOURCE_LICENSE="${SCRIPT_DIR}/LICENSE"
 SOURCE_TOS="${SCRIPT_DIR}/TERMS-OF-SERVICE.md"
+SOURCE_HELP_DIR="${SCRIPT_DIR}/docs"
+SOURCE_PROJECT_INFO="${SCRIPT_DIR}/macos/PROJECT-INFO.md"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.1.1}"
+APP_VERSION="${APP_VERSION:-0.2.0}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -52,6 +62,7 @@ Notes:
   - stale copies in /Applications, ~/Applications, and common CLI bin paths are removed first
   - the CLI has no GUI build dependency
   - the GUI app is compiled locally with the Swift toolchain on macOS
+  - the native app bundle includes brand artwork, help files, and production metadata
 EOF
 }
 
@@ -183,33 +194,28 @@ pick_app_install_dir() {
 
 render_icon_icns() {
   local tmpdir=""
-  local rendered_png=""
   local iconset_dir=""
-  local size=""
-  local double_size=""
   local icns_path=""
 
-  require_command qlmanage
-  require_command sips
   require_command iconutil
 
-  [[ -f "$SOURCE_ICON" ]] || die "Cannot find icon source at $SOURCE_ICON"
+  [[ -d "$SOURCE_ICONSET_DIR" ]] || die "Cannot find AppIcon.appiconset at $SOURCE_ICONSET_DIR"
 
   tmpdir="$(mktemp -d /tmp/gh-actions-cleanup-icon.XXXXXX)"
   register_temp_dir "$tmpdir"
-  qlmanage -t -s 1024 -o "$tmpdir" "$SOURCE_ICON" >/dev/null 2>&1 || die "Failed to render the app icon source"
-
-  rendered_png="$(find "$tmpdir" -maxdepth 1 -type f -name '*.png' | head -n 1)"
-  [[ -n "$rendered_png" ]] || die "Icon rendering did not produce a PNG"
 
   iconset_dir="$tmpdir/AppIcon.iconset"
   mkdir -p "$iconset_dir"
-
-  for size in 16 32 128 256 512; do
-    double_size=$((size * 2))
-    sips -z "$size" "$size" "$rendered_png" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null
-    sips -z "$double_size" "$double_size" "$rendered_png" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null
-  done
+  cp "$SOURCE_ICONSET_DIR/appicon-16x16@1x.png" "$iconset_dir/icon_16x16.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-16x16@2x.png" "$iconset_dir/icon_16x16@2x.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-32x32@1x.png" "$iconset_dir/icon_32x32.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-32x32@2x.png" "$iconset_dir/icon_32x32@2x.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-128x128@1x.png" "$iconset_dir/icon_128x128.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-128x128@2x.png" "$iconset_dir/icon_128x128@2x.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-256x256@1x.png" "$iconset_dir/icon_256x256.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-256x256@2x.png" "$iconset_dir/icon_256x256@2x.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-512x512@1x.png" "$iconset_dir/icon_512x512.png"
+  cp "$SOURCE_ICONSET_DIR/appicon-512x512@2x.png" "$iconset_dir/icon_512x512@2x.png"
 
   icns_path="$tmpdir/AppIcon.icns"
   iconutil -c icns "$iconset_dir" -o "$icns_path" >/dev/null
@@ -247,6 +253,17 @@ install_cli() {
 write_info_plist() {
   local plist_path="$1"
 
+  if [[ -f "$SOURCE_INFO_PLIST_TEMPLATE" ]]; then
+    sed \
+      -e "s|__APP_DISPLAY_NAME__|${APP_DISPLAY_NAME}|g" \
+      -e "s|__APP_EXECUTABLE_NAME__|${APP_EXECUTABLE_NAME}|g" \
+      -e "s|__APP_BUNDLE_ID__|${APP_BUNDLE_ID}|g" \
+      -e "s|__APP_VERSION__|${APP_VERSION}|g" \
+      -e "s|__COPYRIGHT_TEXT__|${COPYRIGHT_TEXT}|g" \
+      "$SOURCE_INFO_PLIST_TEMPLATE" >"$plist_path"
+    return 0
+  fi
+
   cat >"$plist_path" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -272,19 +289,53 @@ write_info_plist() {
   <string>APPL</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
   <key>CFBundleShortVersionString</key>
   <string>${APP_VERSION}</string>
   <key>CFBundleVersion</key>
   <string>${APP_VERSION}</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>GH Workflow Clean opens Terminal only when you explicitly choose the CLI fallback.</string>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright 2026 Wayne Tech Lab LLC</string>
+  <string>${COPYRIGHT_TEXT}</string>
 </dict>
 </plist>
 EOF
+}
+
+copy_file_if_present() {
+  local source_path="$1"
+  local destination_path="$2"
+
+  [[ -f "$source_path" ]] || return 0
+  mkdir -p "$(dirname "$destination_path")"
+  cp "$source_path" "$destination_path"
+}
+
+copy_help_resources() {
+  local resources_dir="$1"
+  local help_dir="$resources_dir/Help"
+  local file=""
+
+  mkdir -p "$help_dir"
+
+  copy_file_if_present "$SOURCE_README" "$help_dir/README.md"
+  copy_file_if_present "$SOURCE_SECURITY" "$help_dir/SECURITY.md"
+  copy_file_if_present "$SOURCE_LICENSE" "$help_dir/LICENSE"
+  copy_file_if_present "$SOURCE_TOS" "$help_dir/TERMS-OF-SERVICE.md"
+  copy_file_if_present "$SOURCE_PROJECT_INFO" "$help_dir/PROJECT-INFO.md"
+
+  if [[ -d "$SOURCE_HELP_DIR" ]]; then
+    while IFS= read -r file; do
+      [[ -n "$file" ]] || continue
+      copy_file_if_present "$file" "$help_dir/$(basename "$file")"
+    done < <(find "$SOURCE_HELP_DIR" -maxdepth 1 -type f -name '*.md' | sort)
+  fi
 }
 
 build_gui_executable() {
@@ -340,6 +391,10 @@ install_app_bundle() {
   if [[ -f "$SOURCE_TOS" ]]; then
     cp "$SOURCE_TOS" "$resources_dir/TERMS-OF-SERVICE.md"
   fi
+  copy_file_if_present "$SOURCE_LOGO_CARD" "$resources_dir/logo-card-square.png"
+  copy_file_if_present "$SOURCE_LOGO_LOCKUP" "$resources_dir/logo-horizontal-lockup.png"
+  copy_file_if_present "$SOURCE_HERO" "$resources_dir/hero-2560x1600.png"
+  copy_help_resources "$resources_dir"
 
   icon_icns="$(render_icon_icns)"
   cp "$icon_icns" "$resources_dir/AppIcon.icns"

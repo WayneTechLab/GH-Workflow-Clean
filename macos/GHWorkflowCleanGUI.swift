@@ -3,14 +3,16 @@ import AppKit
 import Combine
 import UniformTypeIdentifiers
 
-private let appTitle = "GitHub (Action) Clean-UP Tool"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.1"
+private let appTitle = "GH Workflow Clean"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
-private let appSupportDir = NSString(string: "~/Library/Application Support/GitHub Action Clean-Up Tool").expandingTildeInPath
+private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
-private let legacyLastSessionFile = NSString(string: "~/Library/Application Support/GH Workflow Clean/last-session.env").expandingTildeInPath
+private let legacyAppSupportDir = NSString(string: "~/Library/Application Support/GitHub Action Clean-Up Tool").expandingTildeInPath
+private let legacyLastSessionFile = (legacyAppSupportDir as NSString).appendingPathComponent("last-session.env")
+private let bundledHelpDirectory = "Help"
 private let defaultSearchPaths = [
   "/opt/homebrew/bin",
   "/usr/local/bin",
@@ -20,7 +22,7 @@ private let defaultSearchPaths = [
   "/sbin"
 ]
 private let defaultTermsOfServiceText = """
-GitHub (Action) Clean-UP Tool
+GH Workflow Clean
 Provided by Wayne Tech Lab LLC
 www.WayneTechLab.com
 
@@ -171,7 +173,7 @@ final class CleanupViewModel: ObservableObject {
     }
   }
   @Published var repoCatalogStatus = "Load repositories for the selected GitHub account or owner."
-  @Published var logText = "[gui] GitHub (Action) Clean-UP Tool ready.\n"
+  @Published var logText = "[gui] GH Workflow Clean ready.\n"
   @Published var statusTitle = "Checking GitHub CLI"
   @Published var statusDetail = "Loading local GitHub configuration."
   @Published var statusKind: StatusKind = .running
@@ -228,6 +230,22 @@ final class CleanupViewModel: ObservableObject {
     return NSImage(contentsOf: iconURL)
   }
 
+  var bundledBrandMark: NSImage? {
+    bundledImage(named: "logo-card-square.png")
+  }
+
+  var bundledLockup: NSImage? {
+    bundledImage(named: "logo-horizontal-lockup.png")
+  }
+
+  var bundledHero: NSImage? {
+    bundledImage(named: "hero-2560x1600.png")
+  }
+
+  var bundleIdentitySummary: String {
+    "\(Bundle.main.bundleIdentifier ?? "com.waynetechlab.ghworkflowclean") · Version \(appVersion)"
+  }
+
   var canRunCleanup: Bool {
     !isRunning &&
       cliPath != nil &&
@@ -255,8 +273,9 @@ final class CleanupViewModel: ObservableObject {
 
   var authSummary: String {
     let resolvedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
     if isAuthenticated && !resolvedAccount.isEmpty {
-      return "User \(resolvedAccount) on account \(resolvedAccount) ready."
+      return "User \(resolvedAccount) on account \(resolvedAccount) ready on \(resolvedHost)."
     }
     return "No authenticated GitHub account is ready for cleanup."
   }
@@ -386,8 +405,6 @@ final class CleanupViewModel: ObservableObject {
       account = active
     } else if let first = accounts.first {
       account = first
-    } else if currentHost != host {
-      account = ""
     } else if availableAccounts.isEmpty {
       account = ""
     }
@@ -498,7 +515,7 @@ final class CleanupViewModel: ObservableObject {
       "\(shellQuote(cliPath))",
       "EXIT_CODE=$?",
       "printf '\\n'",
-      "if [ $EXIT_CODE -eq 0 ]; then echo 'GitHub (Action) Clean-UP Tool finished.'; else echo \"GitHub (Action) Clean-UP Tool exited with code $EXIT_CODE.\"; fi",
+      "if [ $EXIT_CODE -eq 0 ]; then echo 'GH Workflow Clean finished.'; else echo \"GH Workflow Clean exited with code $EXIT_CODE.\"; fi",
       "echo",
       "read -r -p 'Press Enter to close this window...' _"
     ].joined(separator: "; ")
@@ -554,6 +571,39 @@ final class CleanupViewModel: ObservableObject {
         self.refreshAuthStatus()
       }
     }
+  }
+
+  func openBundledHelpDocument(_ fileName: String) {
+    guard let url = bundledResourceURL(named: fileName, subdirectory: bundledHelpDirectory) else {
+      appendLog("[gui] Help document not found: \(fileName)\n")
+      return
+    }
+
+    NSWorkspace.shared.open(url)
+  }
+
+  func openCompanyWebsite() {
+    guard let url = URL(string: companyWebsiteURL) else {
+      appendLog("[gui] Company website URL is invalid.\n")
+      return
+    }
+
+    NSWorkspace.shared.open(url)
+  }
+
+  func revealSessionStorage() {
+    let supportURL = URL(fileURLWithPath: appSupportDir, isDirectory: true)
+    try? FileManager.default.createDirectory(at: supportURL, withIntermediateDirectories: true)
+    NSWorkspace.shared.activateFileViewerSelecting([supportURL])
+  }
+
+  func revealBundledHelpDirectory() {
+    guard let helpURL = bundledResourceURL(named: bundledHelpDirectory) else {
+      appendLog("[gui] Bundled help directory was not found.\n")
+      return
+    }
+
+    NSWorkspace.shared.activateFileViewerSelecting([helpURL])
   }
 
   func setAllLoadedReposSelected(_ enabled: Bool) {
@@ -1047,6 +1097,31 @@ private func bundledTermsOfServiceText() -> String {
   return contents
 }
 
+private func bundledResourceURL(named name: String, subdirectory: String? = nil) -> URL? {
+  let resourceRoot = Bundle.main.resourceURL
+
+  if let subdirectory {
+    let url = resourceRoot?.appendingPathComponent(subdirectory).appendingPathComponent(name)
+    if let url, FileManager.default.fileExists(atPath: url.path) {
+      return url
+    }
+  }
+
+  let directURL = resourceRoot?.appendingPathComponent(name)
+  if let directURL, FileManager.default.fileExists(atPath: directURL.path) {
+    return directURL
+  }
+
+  return nil
+}
+
+private func bundledImage(named name: String) -> NSImage? {
+  guard let url = bundledResourceURL(named: name) else {
+    return nil
+  }
+  return NSImage(contentsOf: url)
+}
+
 private func redactSensitiveText(_ text: String) -> String {
   let replacements: [(pattern: String, replacement: String)] = [
     ("ghp_[A-Za-z0-9]{20,}", "[REDACTED_GITHUB_TOKEN]"),
@@ -1071,21 +1146,28 @@ private func redactSensitiveText(_ text: String) -> String {
 }
 
 private enum DashboardTheme {
-  static let canvasTop = Color(red: 0.03, green: 0.05, blue: 0.09)
-  static let canvasBottom = Color(red: 0.06, green: 0.09, blue: 0.14)
-  static let panel = Color(red: 0.07, green: 0.10, blue: 0.15)
-  static let panelAlt = Color(red: 0.09, green: 0.13, blue: 0.19)
-  static let panelStrong = Color(red: 0.05, green: 0.08, blue: 0.12)
-  static let field = Color(red: 0.10, green: 0.14, blue: 0.20)
-  static let border = Color.white.opacity(0.10)
-  static let text = Color(red: 0.95, green: 0.97, blue: 0.99)
-  static let muted = Color(red: 0.72, green: 0.78, blue: 0.86)
-  static let subtle = Color(red: 0.53, green: 0.60, blue: 0.69)
-  static let accent = Color(red: 0.29, green: 0.78, blue: 1.0)
-  static let success = Color(red: 0.18, green: 0.82, blue: 0.54)
+  static let navyOutline = Color(red: 31 / 255, green: 77 / 255, blue: 134 / 255)
+  static let deepBlue = Color(red: 21 / 255, green: 80 / 255, blue: 143 / 255)
+  static let brightPink = Color(red: 246 / 255, green: 95 / 255, blue: 165 / 255)
+  static let accentPink = Color(red: 217 / 255, green: 44 / 255, blue: 123 / 255)
+  static let coolWhite = Color(red: 247 / 255, green: 248 / 255, blue: 250 / 255)
+  static let gridGray = Color(red: 216 / 255, green: 221 / 255, blue: 227 / 255)
+
+  static let canvasTop = Color(red: 9 / 255, green: 21 / 255, blue: 38 / 255)
+  static let canvasBottom = Color(red: 14 / 255, green: 35 / 255, blue: 63 / 255)
+  static let panel = Color(red: 12 / 255, green: 31 / 255, blue: 53 / 255)
+  static let panelAlt = Color(red: 17 / 255, green: 45 / 255, blue: 77 / 255)
+  static let panelStrong = Color(red: 8 / 255, green: 22 / 255, blue: 39 / 255)
+  static let field = Color(red: 17 / 255, green: 39 / 255, blue: 66 / 255)
+  static let border = gridGray.opacity(0.18)
+  static let text = coolWhite
+  static let muted = gridGray.opacity(0.86)
+  static let subtle = gridGray.opacity(0.62)
+  static let accent = deepBlue
+  static let success = Color(red: 74 / 255, green: 201 / 255, blue: 158 / 255)
   static let warning = Color(red: 0.98, green: 0.73, blue: 0.23)
-  static let danger = Color(red: 0.94, green: 0.33, blue: 0.28)
-  static let cautionPanel = Color(red: 0.24, green: 0.15, blue: 0.08)
+  static let danger = accentPink
+  static let cautionPanel = Color(red: 53 / 255, green: 19 / 255, blue: 43 / 255)
 }
 
 private extension View {
@@ -1203,6 +1285,9 @@ struct BannerCard: View {
 
 struct HeaderPanel: View {
   let icon: NSImage?
+  let brandMark: NSImage?
+  let lockup: NSImage?
+  let hero: NSImage?
   let lastSessionSummary: String?
   let statusTitle: String
   let statusKind: StatusKind
@@ -1225,26 +1310,40 @@ struct HeaderPanel: View {
     }
     .padding(24)
     .background(
-      RoundedRectangle(cornerRadius: 28, style: .continuous)
-        .fill(
-          LinearGradient(
-            colors: [DashboardTheme.panelStrong, DashboardTheme.panelAlt],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+      ZStack(alignment: .trailing) {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+          .fill(
+            LinearGradient(
+              colors: [DashboardTheme.panelStrong, DashboardTheme.panelAlt],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
           )
-        )
-        .overlay(
+          .overlay(
           RoundedRectangle(cornerRadius: 28, style: .continuous)
             .stroke(DashboardTheme.border, lineWidth: 1)
-        )
+          )
+
+        if let hero {
+          Image(nsImage: hero)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: compact ? 240 : 360)
+            .opacity(0.14)
+            .padding(.trailing, compact ? 18 : 30)
+            .padding(.vertical, 6)
+            .allowsHitTesting(false)
+        }
+      }
     )
   }
 
   @ViewBuilder
   private var titleBlock: some View {
     HStack(alignment: .center, spacing: 22) {
-      if let icon {
-        Image(nsImage: icon)
+      if let primaryMark = brandMark ?? icon {
+        Image(nsImage: primaryMark)
           .resizable()
           .aspectRatio(contentMode: .fit)
           .frame(width: compact ? 74 : 92, height: compact ? 74 : 92)
@@ -1255,12 +1354,20 @@ struct HeaderPanel: View {
         Text("W.T.L.")
           .font(.system(size: 14, weight: .semibold, design: .rounded))
           .tracking(2.4)
-          .foregroundStyle(DashboardTheme.accent)
+          .foregroundStyle(DashboardTheme.brightPink)
 
-        Text(appTitle)
-          .font(.system(size: compact ? 28 : 34, weight: .bold, design: .rounded))
-          .foregroundStyle(DashboardTheme.text)
-          .lineLimit(2)
+        if let lockup {
+          Image(nsImage: lockup)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: compact ? 280 : 420, alignment: .leading)
+        } else {
+          Text(appTitle)
+            .font(.system(size: compact ? 28 : 34, weight: .bold, design: .rounded))
+            .foregroundStyle(DashboardTheme.text)
+            .lineLimit(2)
+        }
 
         Text("Professional GitHub Actions deletion and cleanup console for macOS.")
           .font(.system(size: 14, weight: .medium, design: .rounded))
@@ -1279,9 +1386,9 @@ struct HeaderPanel: View {
   private func statusBlock(alignment: HorizontalAlignment) -> some View {
     VStack(alignment: alignment, spacing: 12) {
       HStack(spacing: 10) {
-        PillBadge(text: "Native SwiftUI", tint: DashboardTheme.accent)
+        PillBadge(text: "Native SwiftUI", tint: DashboardTheme.deepBlue)
         PillBadge(text: "CLI Engine", tint: DashboardTheme.success)
-        PillBadge(text: "Version \(appVersion)", tint: DashboardTheme.warning)
+        PillBadge(text: "Version \(appVersion)", tint: DashboardTheme.brightPink)
       }
 
       Text(statusTitle)
@@ -1483,6 +1590,8 @@ struct SafetyCard: View {
 struct LaunchWarningSheet: View {
   @Binding var acceptedRisk: Bool
   @Binding var acceptedPurpose: Bool
+  let brandMark: NSImage?
+  let lockup: NSImage?
   let continueAction: () -> Void
   let quitAction: () -> Void
 
@@ -1500,17 +1609,46 @@ struct LaunchWarningSheet: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           HStack(alignment: .top, spacing: 18) {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .font(.system(size: 28, weight: .bold))
-              .foregroundStyle(DashboardTheme.text)
-              .frame(width: 64, height: 64)
-              .background(DashboardTheme.danger)
-              .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            ZStack {
+              RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                  LinearGradient(
+                    colors: [DashboardTheme.panelStrong, DashboardTheme.panelAlt],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                  )
+                )
+                .overlay(
+                  RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(DashboardTheme.border, lineWidth: 1)
+                )
+
+              if let brandMark {
+                Image(nsImage: brandMark)
+                  .resizable()
+                  .interpolation(.high)
+                  .aspectRatio(contentMode: .fit)
+                  .padding(10)
+              } else {
+                Image(systemName: "exclamationmark.triangle.fill")
+                  .font(.system(size: 28, weight: .bold))
+                  .foregroundStyle(DashboardTheme.text)
+              }
+            }
+            .frame(width: 84, height: 84)
 
             VStack(alignment: .leading, spacing: 8) {
               Text("Warning!")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(DashboardTheme.text)
+
+              if let lockup {
+                Image(nsImage: lockup)
+                  .resizable()
+                  .interpolation(.high)
+                  .aspectRatio(contentMode: .fit)
+                  .frame(maxWidth: 320, alignment: .leading)
+              }
 
               Text("This is a deletion tool. Use at your own risk.")
                 .font(.system(size: 17, weight: .bold, design: .rounded))
@@ -1642,6 +1780,9 @@ struct ContentView: View {
             DashboardShell {
               HeaderPanel(
                 icon: model.bundledIcon,
+                brandMark: model.bundledBrandMark,
+                lockup: model.bundledLockup,
+                hero: model.bundledHero,
                 lastSessionSummary: model.lastSessionSummary,
                 statusTitle: model.statusTitle,
                 statusKind: model.statusKind,
@@ -1652,17 +1793,19 @@ struct ContentView: View {
             }
           }
           .padding(16)
-          .frame(maxWidth: 2440)
+          .frame(maxWidth: 3200)
           .frame(maxWidth: .infinity)
         }
       }
     }
-    .frame(minWidth: 720, minHeight: 620)
+    .frame(minWidth: 760, minHeight: 640)
     .preferredColorScheme(.dark)
     .sheet(isPresented: $showLaunchWarning) {
       LaunchWarningSheet(
         acceptedRisk: $acceptedRisk,
         acceptedPurpose: $acceptedPurpose,
+        brandMark: model.bundledBrandMark,
+        lockup: model.bundledLockup,
         continueAction: {
           showLaunchWarning = false
         },
@@ -1687,6 +1830,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
           cleanupPanel
           executionPanel
+          supportPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -1704,6 +1848,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
           cleanupPanel
           executionPanel
+          supportPanel
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
 
@@ -1719,6 +1864,7 @@ struct ContentView: View {
           VStack(alignment: .leading, spacing: 18) {
             cleanupPanel
             executionPanel
+            supportPanel
           }
           .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -1732,6 +1878,7 @@ struct ContentView: View {
         repositoryPanel
         cleanupPanel
         executionPanel
+        supportPanel
         logPanel(minHeight: 320)
       }
     }
@@ -1996,6 +2143,100 @@ struct ContentView: View {
     }
   }
 
+  private var supportPanel: some View {
+    PanelCard(title: "Help & Project Info", subtitle: "Bundled support docs, brand references, and production metadata.") {
+      BannerCard(
+        title: "Production Bundle Ready",
+        detail: "\(model.bundleIdentitySummary)\nApp help files and brand assets are bundled inside the native app package.",
+        kind: .ready
+      )
+
+      if let brandMark = model.bundledBrandMark {
+        HStack(alignment: .center, spacing: 14) {
+          Image(nsImage: brandMark)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 58, height: 58)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Exact master artwork loaded")
+              .font(.system(size: 14, weight: .bold, design: .rounded))
+              .foregroundStyle(DashboardTheme.text)
+
+            Text("The native app is using the supplied production logo pack, app icon set, and brand docs.")
+              .font(.system(size: 12, weight: .medium, design: .rounded))
+              .foregroundStyle(DashboardTheme.muted)
+              .lineSpacing(2)
+          }
+
+          Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(DashboardTheme.panelStrong)
+            .overlay(
+              RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(DashboardTheme.border, lineWidth: 1)
+            )
+        )
+      }
+
+      LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
+        Button("Open Help Center") {
+          model.openBundledHelpDocument("Help-Center.md")
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+
+        Button("Open Terms") {
+          model.openBundledHelpDocument("TERMS-OF-SERVICE.md")
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+
+        Button("Open Security Notes") {
+          model.openBundledHelpDocument("SECURITY.md")
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: true))
+
+        Button("Open Brand System") {
+          model.openBundledHelpDocument("Brand-System.md")
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.brightPink, bordered: true))
+
+        Button("Open macOS App Notes") {
+          model.openBundledHelpDocument("macOS-App-Notes.md")
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: true))
+
+        Button("Open Project Info") {
+          model.openBundledHelpDocument("PROJECT-INFO.md")
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accentPink, bordered: true))
+
+        Button("Open Website") {
+          model.openCompanyWebsite()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.deepBlue, bordered: true))
+
+        Button("Reveal Session Storage") {
+          model.revealSessionStorage()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+
+        Button("Reveal Bundled Help") {
+          model.revealBundledHelpDirectory()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: true))
+      }
+
+      Text("Use the bundled help files for onboarding, legal review, macOS packaging notes, and brand consistency. The Xcode-ready assets live under macos/Assets.xcassets in the repo.")
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineSpacing(2)
+    }
+  }
+
   private func logPanel(minHeight: CGFloat) -> some View {
     PanelCard(title: "Live Output", subtitle: "Readable, high-contrast CLI output streamed into the native app.") {
       LogConsoleView(text: model.logText)
@@ -2051,12 +2292,12 @@ final class GHWorkflowCleanAppDelegate: NSObject, NSApplicationDelegate {
       y: visibleFrame.origin.y + ((visibleFrame.height - targetSize.height) / 2)
     )
 
-    window.minSize = NSSize(width: 720, height: 620)
+    window.minSize = NSSize(width: 760, height: 640)
     window.setFrame(NSRect(origin: targetOrigin, size: targetSize), display: true)
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.toolbarStyle = .unified
-    window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.06, blue: 0.10, alpha: 1)
+    window.backgroundColor = NSColor(calibratedRed: 9 / 255, green: 21 / 255, blue: 38 / 255, alpha: 1)
     window.isMovableByWindowBackground = false
     window.tabbingMode = .disallowed
   }
@@ -2083,8 +2324,8 @@ final class GHWorkflowCleanAppDelegate: NSObject, NSApplicationDelegate {
       heightRatio = 0.90
     }
 
-    let width = min(max(screenSize.width * widthRatio, 720), 2440)
-    let height = min(max(screenSize.height * heightRatio, 620), 1440)
+    let width = min(max(screenSize.width * widthRatio, 760), 3200)
+    let height = min(max(screenSize.height * heightRatio, 640), 1440)
     return NSSize(width: width, height: height)
   }
 }

@@ -1,6 +1,6 @@
 ## Security Notes
 
-GitHub (Action) Clean-UP Tool is designed to use the existing GitHub CLI authentication state rather than embedding or storing GitHub tokens itself.
+GH Workflow Clean is designed to use the existing GitHub CLI authentication state rather than embedding or storing GitHub tokens itself.
 
 ### What This Project Stores
 
@@ -12,11 +12,11 @@ The project stores only the last-used:
 
 That data is stored in:
 
-- `~/Library/Application Support/GitHub Action Clean-Up Tool/last-session.env`
+- `~/Library/Application Support/GH Workflow Clean/last-session.env`
 
 Older versions may have stored the same non-secret session values in:
 
-- `~/Library/Application Support/GH Workflow Clean/last-session.env`
+- `~/Library/Application Support/GitHub Action Clean-Up Tool/last-session.env`
 
 ### What This Project Does Not Store
 

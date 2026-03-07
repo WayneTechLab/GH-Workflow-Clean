@@ -1,4 +1,4 @@
-## GitHub (Action) Clean-UP Tool Terms of Service
+## GH Workflow Clean Terms of Service
 
 Provided by Wayne Tech Lab LLC  
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
@@ -9,7 +9,7 @@ Effective date: March 6, 2026
 
 This is a deletion tool. Use at your own risk.
 
-GitHub (Action) Clean-UP Tool is designed to perform professional GitHub Actions cleanup tasks, including the deletion of workflow runs, artifacts, caches, and workflow configurations. These actions can be permanent and irreversible.
+GH Workflow Clean is designed to perform professional GitHub Actions cleanup tasks, including the deletion of workflow runs, artifacts, caches, and workflow configurations. These actions can be permanent and irreversible.
 
 ### Intended Use
 
@@ -38,4 +38,4 @@ To the maximum extent permitted by law, Wayne Tech Lab LLC, its operators, affil
 
 ### Acceptance
 
-By launching, installing, or using GitHub (Action) Clean-UP Tool, you agree to these terms and accept full responsibility for use of the product. If you do not agree, do not use the software.
+By launching, installing, or using GH Workflow Clean, you agree to these terms and accept full responsibility for use of the product. If you do not agree, do not use the software.
