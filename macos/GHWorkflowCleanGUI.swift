@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.3"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.4"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -384,6 +384,32 @@ final class CleanupViewModel: ObservableObject {
       return "Selected account is ready. You can refresh, log out, or continue to repository cleanup."
     }
     return "Log in with GitHub CLI first, then select the account you want to use."
+  }
+
+  var sessionCompactLabel: String {
+    let resolvedHost = host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "github.com" : host.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolvedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
+    let accountValue = resolvedAccount.isEmpty ? (selectedHostConfig?.activeUser ?? "no account") : resolvedAccount
+    return isAuthenticated ? "\(accountValue) @ \(resolvedHost) ready" : "Login required @ \(resolvedHost)"
+  }
+
+  var selectionCompactLabel: String {
+    let count = cleanupTargets.count
+    if count == 0 {
+      return "No targets selected"
+    }
+    if count == 1, let target = cleanupTargets.first {
+      return target
+    }
+    return "\(count) targets selected"
+  }
+
+  var statusCompactLabel: String {
+    let trimmedTitle = statusTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmedTitle.isEmpty {
+      return "Idle"
+    }
+    return trimmedTitle
   }
 
   var lastSessionSummary: String? {
@@ -1538,27 +1564,21 @@ private struct DestinationMenuButton: View {
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 12) {
+      HStack(spacing: 10) {
         Image(systemName: destination.icon)
           .font(.system(size: 14, weight: .bold))
           .foregroundStyle(isSelected ? DashboardTheme.text : destination.tint)
           .frame(width: 20)
 
-        VStack(alignment: .leading, spacing: 3) {
-          Text(destination.title)
-            .font(.system(size: 14, weight: .bold, design: .rounded))
-            .foregroundStyle(DashboardTheme.text)
-
-          Text(destination.subtitle)
-            .font(.system(size: 11, weight: .medium, design: .rounded))
-            .foregroundStyle(isSelected ? DashboardTheme.coolWhite.opacity(0.82) : DashboardTheme.muted)
-            .lineLimit(2)
-        }
+        Text(destination.title)
+          .font(.system(size: 13, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
+          .lineLimit(1)
 
         Spacer(minLength: 0)
       }
       .padding(.horizontal, 14)
-      .padding(.vertical, 12)
+      .padding(.vertical, 11)
       .background(
         RoundedRectangle(cornerRadius: 16, style: .continuous)
           .fill(isSelected ? destination.tint.opacity(0.42) : DashboardTheme.field)
@@ -1569,6 +1589,97 @@ private struct DestinationMenuButton: View {
       )
     }
     .buttonStyle(.plain)
+  }
+}
+
+private struct WorkspaceToolbarStrip: View {
+  let destination: AppDestination
+  let menuVisible: Bool
+  let usesSidebar: Bool
+  let toggleMenu: () -> Void
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Button(menuVisible ? "Hide Menu" : "Show Menu") {
+        toggleMenu()
+      }
+      .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+
+      PillBadge(text: destination.title, tint: destination.tint)
+
+      Spacer(minLength: 0)
+
+      Text(menuVisible ? (usesSidebar ? "Sidebar menu" : "Top menu") : "Focus mode")
+        .font(.system(size: 11, weight: .semibold, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineLimit(1)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
+    .background(
+      RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .fill(DashboardTheme.panelAlt)
+        .overlay(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+    )
+  }
+}
+
+private struct BottomStatusBar: View {
+  let kind: StatusKind
+  let status: String
+  let session: String
+  let selection: String
+  let destination: AppDestination
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Image(systemName: kind.icon)
+        .font(.system(size: 12, weight: .bold))
+        .foregroundStyle(kind.tint)
+
+      Text(status)
+        .font(.system(size: 12, weight: .bold, design: .rounded))
+        .foregroundStyle(DashboardTheme.text)
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+
+      Text("•")
+        .foregroundStyle(DashboardTheme.subtle)
+
+      Text(session)
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .truncationMode(.middle)
+
+      Text("•")
+        .foregroundStyle(DashboardTheme.subtle)
+
+      Text(selection)
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .truncationMode(.middle)
+
+      Spacer(minLength: 0)
+
+      PillBadge(text: destination.title, tint: destination.tint)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
+    .background(
+      RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .fill(DashboardTheme.panelAlt)
+        .overlay(
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+    )
   }
 }
 
@@ -2003,6 +2114,7 @@ struct LogConsoleView: NSViewRepresentable {
 struct ContentView: View {
   @StateObject private var model = CleanupViewModel()
   @State private var selectedDestination: AppDestination = .controlCenter
+  @State private var isMenuVisible = true
   @State private var showLaunchWarning = true
   @State private var acceptedRisk = false
   @State private var acceptedPurpose = false
@@ -2011,8 +2123,10 @@ struct ContentView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let useSidebarMenu = geometry.size.width >= 1380
-      let detailWidth = max(geometry.size.width - (useSidebarMenu ? 360 : 32), 680)
+      let canUseSidebarMenu = geometry.size.width >= 1440
+      let showSidebarMenu = canUseSidebarMenu && isMenuVisible
+      let showCompactMenu = !canUseSidebarMenu && isMenuVisible
+      let detailWidth = max(geometry.size.width - (showSidebarMenu ? 360 : 32), 640)
 
       ZStack {
         LinearGradient(
@@ -2022,27 +2136,40 @@ struct ContentView: View {
         )
         .ignoresSafeArea()
 
-        Group {
-          if useSidebarMenu {
-            HStack(alignment: .top, spacing: 18) {
-              AppSidebarMenu(selection: selectedDestination) { destination in
-                selectedDestination = destination
-              }
-              .frame(width: 320)
+        VStack(spacing: 12) {
+          Group {
+            if showSidebarMenu {
+              HStack(alignment: .top, spacing: 18) {
+                AppSidebarMenu(selection: selectedDestination) { destination in
+                  selectedDestination = destination
+                }
+                .frame(width: 320)
 
-              pageContainer(for: detailWidth)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                pageContainer(for: detailWidth, usesSidebar: canUseSidebarMenu)
+                  .frame(maxWidth: .infinity, alignment: .topLeading)
+              }
+            }
+            else {
+              VStack(spacing: 12) {
+                if showCompactMenu {
+                  CompactDestinationBar(selection: selectedDestination) { destination in
+                    selectedDestination = destination
+                  }
+                }
+
+                pageContainer(for: detailWidth, usesSidebar: canUseSidebarMenu)
+                  .frame(maxWidth: .infinity, alignment: .topLeading)
+              }
             }
           }
-          else {
-            VStack(spacing: 16) {
-              CompactDestinationBar(selection: selectedDestination) { destination in
-                selectedDestination = destination
-              }
 
-              pageContainer(for: detailWidth)
-            }
-          }
+          BottomStatusBar(
+            kind: model.statusKind,
+            status: model.statusCompactLabel,
+            session: model.sessionCompactLabel,
+            selection: model.selectionCompactLabel,
+            destination: selectedDestination
+          )
         }
         .padding(16)
       }
@@ -2067,16 +2194,16 @@ struct ContentView: View {
   }
 
   @ViewBuilder
-  private func pageContainer(for width: CGFloat) -> some View {
+  private func pageContainer(for width: CGFloat, usesSidebar: Bool) -> some View {
     ScrollView {
       VStack(spacing: 18) {
         switch selectedDestination {
         case .controlCenter:
-          controlCenterPage(for: width)
+          controlCenterPage(for: width, usesSidebar: usesSidebar)
         case .about:
-          aboutPage
+          aboutPage(usesSidebar: usesSidebar)
         case .helpCenter, .terms, .security, .brandSystem, .macOSNotes, .projectInfo:
-          documentPage(for: selectedDestination)
+          documentPage(for: selectedDestination, usesSidebar: usesSidebar)
         }
       }
       .frame(maxWidth: 3200)
@@ -2084,18 +2211,26 @@ struct ContentView: View {
     }
   }
 
-  private func controlCenterPage(for width: CGFloat) -> some View {
+  private func controlCenterPage(for width: CGFloat, usesSidebar: Bool) -> some View {
     DashboardShell {
       HeaderPanel(
         brandMark: model.bundledBrandMark,
         compact: width < 1280
       )
 
+      WorkspaceToolbarStrip(
+        destination: selectedDestination,
+        menuVisible: isMenuVisible,
+        usesSidebar: usesSidebar
+      ) {
+        isMenuVisible.toggle()
+      }
+
       dashboardLayout(for: width)
     }
   }
 
-  private func documentPage(for destination: AppDestination) -> some View {
+  private func documentPage(for destination: AppDestination, usesSidebar: Bool) -> some View {
     let markdown = bundledDocumentText(
       named: destination.bundleDocumentName ?? "",
       fallback: destination.fallbackDocumentText
@@ -2107,16 +2242,32 @@ struct ContentView: View {
         compact: false
       )
 
+      WorkspaceToolbarStrip(
+        destination: destination,
+        menuVisible: isMenuVisible,
+        usesSidebar: usesSidebar
+      ) {
+        isMenuVisible.toggle()
+      }
+
       DocumentReaderCard(destination: destination, markdown: markdown)
     }
   }
 
-  private var aboutPage: some View {
+  private func aboutPage(usesSidebar: Bool) -> some View {
     DashboardShell {
       HeaderPanel(
         brandMark: model.bundledBrandMark,
         compact: false
       )
+
+      WorkspaceToolbarStrip(
+        destination: .about,
+        menuVisible: isMenuVisible,
+        usesSidebar: usesSidebar
+      ) {
+        isMenuVisible.toggle()
+      }
 
       PanelCard(title: "About GH Workflow Clean", subtitle: "Product identity, bundle metadata, local storage path, and utility actions without leaving the app shell.") {
         BannerCard(
@@ -2243,11 +2394,7 @@ struct ContentView: View {
 
   private var authPanel: some View {
     PanelCard(title: "GitHub Auth", subtitle: "Clear account state, login controls, and fixed-value handling.") {
-      BannerCard(
-        title: model.authHeadline,
-        detail: "\(model.authSummary)\n\(model.authActionHint)",
-        kind: model.isAuthenticated ? .ready : .warning
-      )
+      FixedValueRow(label: "Current GitHub Session", value: model.sessionCompactLabel)
 
       if model.availableHosts.count > 1 {
         VStack(alignment: .leading, spacing: 6) {
@@ -2292,6 +2439,11 @@ struct ContentView: View {
       } else {
         FixedValueRow(label: "Authenticated Account", value: "No logged-in account found for this host")
       }
+
+      Text("Account state is mirrored in the bottom status bar. Refresh or re-login here only when you need to change the active GitHub session.")
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineSpacing(2)
 
       VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 10) {
