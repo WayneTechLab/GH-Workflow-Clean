@@ -4,6 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.5"
 private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
 private let defaultSearchPaths = [
@@ -885,7 +886,7 @@ struct HeaderPanel: View {
         HStack(spacing: 10) {
           PillBadge(text: "Native SwiftUI", tint: DashboardTheme.accent)
           PillBadge(text: "CLI Engine", tint: DashboardTheme.success)
-          PillBadge(text: "Version 0.0.4", tint: DashboardTheme.warning)
+          PillBadge(text: "Version \(appVersion)", tint: DashboardTheme.warning)
         }
 
         Text(statusTitle)
@@ -1321,5 +1322,22 @@ final class GHWorkflowCleanAppDelegate: NSObject, NSApplicationDelegate {
        let iconImage = NSImage(contentsOf: iconURL) {
       NSApplication.shared.applicationIconImage = iconImage
     }
+
+    DispatchQueue.main.async {
+      for window in NSApp.windows {
+        self.configure(window)
+      }
+    }
+  }
+
+  private func configure(_ window: NSWindow) {
+    window.minSize = NSSize(width: 1380, height: 880)
+    window.setContentSize(NSSize(width: 1480, height: 920))
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.toolbarStyle = .unified
+    window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.06, blue: 0.10, alpha: 1)
+    window.isMovableByWindowBackground = false
+    window.center()
   }
 }
