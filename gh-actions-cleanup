@@ -3,7 +3,7 @@
 set -uo pipefail
 
 APP_NAME="gh-actions-cleanup"
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 HOST=""
 ACCOUNT=""
@@ -21,6 +21,7 @@ ASSUME_YES=0
 DRY_RUN=0
 NO_COLOR=0
 RUN_FILTER=""
+TARGET_RUN_ID=""
 
 ORIGINAL_ACCOUNT=""
 SWITCHED_ACCOUNT=0
@@ -103,6 +104,7 @@ Options:
   --repo HOST/OWNER/REPO    Repository with explicit host
   --disable-workflows       Disable all workflows in the repository
   --delete-runs             Delete all workflow runs
+  --run TARGET              Delete one specific workflow run by numeric ID or GitHub run URL
   --run-filter TEXT         Delete only workflow runs whose name/title/path contains TEXT
   --delete-artifacts        Delete all Actions artifacts
   --delete-caches           Delete all Actions caches
@@ -117,6 +119,7 @@ Examples:
   ${APP_NAME}
   ${APP_NAME} --all
   ${APP_NAME} --repo OWNER/REPO --all --yes
+  ${APP_NAME} --repo OWNER/REPO --delete-runs --run https://github.com/OWNER/REPO/actions/runs/123456789/workflow --yes
   ${APP_NAME} --repo OWNER/REPO --delete-runs --run-filter "Sync Google Analytics Data" --yes
   ${APP_NAME} --host github.com --account USERNAME --repo OWNER/REPO --delete-runs --yes
 EOF
@@ -151,6 +154,24 @@ format_epoch_local() {
   else
     date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z'
   fi
+}
+
+parse_run_target() {
+  local target="$1"
+  local run_id=""
+
+  if [[ "$target" =~ ^[0-9]+$ ]]; then
+    printf "%s" "$target"
+    return 0
+  fi
+
+  if [[ "$target" =~ /actions/runs/([0-9]+) ]]; then
+    run_id="${BASH_REMATCH[1]}"
+    printf "%s" "$run_id"
+    return 0
+  fi
+
+  return 1
 }
 
 trim() {
@@ -496,28 +517,47 @@ resolve_repo() {
 
 ensure_api_ready() {
   local status_output=""
+  local limit=""
   local remaining=""
   local reset=""
   local reset_local=""
+  local auth_status_ok=1
 
   if ! status_output="$(gh auth status --hostname "$HOST" 2>&1)"; then
+    auth_status_ok=0
     warn "GitHub authentication for $ACCOUNT on $HOST is invalid or expired."
-    if [[ "$ASSUME_YES" -eq 0 ]] && confirm "Re-authenticate now with repo and workflow scopes?" Y; then
-      gh auth refresh --hostname "$HOST" --scopes repo,workflow || gh auth login --hostname "$HOST" || \
-        die "GitHub re-authentication failed for $HOST"
-      gh auth status --hostname "$HOST" >/dev/null 2>&1 || die "GitHub authentication is still not valid for $HOST"
-    else
-      printf "%s\n" "$status_output" >&2
-      die "Run 'gh auth refresh --hostname $HOST --scopes repo,workflow' or 'gh auth login --hostname $HOST' and retry."
-    fi
   fi
 
+  limit="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.limit' 2>/dev/null || printf "")"
   remaining="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.remaining' 2>/dev/null || printf "")"
   reset="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.reset' 2>/dev/null || printf "")"
+
+  if [[ ! "$remaining" =~ ^[0-9]+$ ]]; then
+    if [[ "$auth_status_ok" -eq 0 && "$ASSUME_YES" -eq 0 ]] && confirm "Re-authenticate now with repo and workflow scopes?" Y; then
+      gh auth refresh --hostname "$HOST" --scopes repo,workflow || gh auth login --hostname "$HOST" || \
+        die "GitHub re-authentication failed for $HOST"
+      limit="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.limit' 2>/dev/null || printf "")"
+      remaining="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.remaining' 2>/dev/null || printf "")"
+      reset="$(gh api --hostname "$HOST" rate_limit --jq '.resources.core.reset' 2>/dev/null || printf "")"
+    fi
+
+    [[ "$remaining" =~ ^[0-9]+$ ]] || {
+      [[ "$auth_status_ok" -eq 0 ]] && printf "%s\n" "$status_output" >&2
+      die "GitHub API access failed for $HOST. Run 'gh auth refresh --hostname $HOST --scopes repo,workflow' or 'gh auth login --hostname $HOST' and retry."
+    }
+  fi
+
+  if [[ "$limit" =~ ^[0-9]+$ ]] && (( limit < 5000 )); then
+    die "GitHub API access for $HOST appears unauthenticated or under-scoped (core limit $limit). Run 'gh auth refresh --hostname $HOST --scopes repo,workflow' or 'gh auth login --hostname $HOST'."
+  fi
 
   if [[ "$remaining" =~ ^[0-9]+$ ]] && (( remaining == 0 )); then
     reset_local="$(format_epoch_local "$reset" 2>/dev/null || printf "unknown")"
     die "GitHub API core rate limit is exhausted for $ACCOUNT on $HOST. Reset at $reset_local."
+  fi
+
+  if [[ "$auth_status_ok" -eq 0 ]]; then
+    warn "Stored gh auth status looks stale, but live GitHub API access is working. Continuing."
   fi
 }
 
@@ -552,11 +592,34 @@ select_actions() {
 }
 
 resolve_run_filter() {
-  if [[ "$DO_RUNS" -ne 1 || -n "$RUN_FILTER" || "$ASSUME_YES" -eq 1 ]]; then
+  if [[ "$DO_RUNS" -ne 1 || -n "$RUN_FILTER" || -n "$TARGET_RUN_ID" || "$ASSUME_YES" -eq 1 ]]; then
     return 0
   fi
 
   RUN_FILTER="$(prompt_optional "Workflow run filter (optional substring, blank for all runs)")"
+}
+
+resolve_target_run() {
+  local target_value=""
+  local parsed_run_id=""
+
+  if [[ "$DO_RUNS" -ne 1 ]]; then
+    return 0
+  fi
+
+  if [[ -n "$TARGET_RUN_ID" ]]; then
+    parsed_run_id="$(parse_run_target "$TARGET_RUN_ID")" || die "--run must be a numeric workflow run ID or a GitHub Actions run URL"
+    TARGET_RUN_ID="$parsed_run_id"
+    return 0
+  fi
+
+  [[ "$ASSUME_YES" -eq 1 ]] && return 0
+
+  target_value="$(prompt_optional "Specific run URL or ID (optional, blank for none)")"
+  if [[ -n "$target_value" ]]; then
+    parsed_run_id="$(parse_run_target "$target_value")" || die "Run target must be a numeric workflow run ID or a GitHub Actions run URL"
+    TARGET_RUN_ID="$parsed_run_id"
+  fi
 }
 
 count_from_api() {
@@ -606,6 +669,11 @@ collect_workflow_rows() {
 collect_run_ids() {
   local output=""
   local filter=""
+
+  if [[ -n "$TARGET_RUN_ID" ]]; then
+    printf "%s\n" "$TARGET_RUN_ID"
+    return 0
+  fi
 
   if [[ -z "$RUN_FILTER" ]]; then
     collect_api_ids "repos/${OWNER}/${REPO_NAME}/actions/runs?per_page=100" '.workflow_runs[]?.id'
@@ -658,6 +726,7 @@ show_summary() {
   printf "  Delete runs: %s\n" "$([[ "$DO_RUNS" -eq 1 ]] && printf yes || printf no)"
   printf "  Delete artifacts: %s\n" "$([[ "$DO_ARTIFACTS" -eq 1 ]] && printf yes || printf no)"
   printf "  Delete caches: %s\n" "$([[ "$DO_CACHES" -eq 1 ]] && printf yes || printf no)"
+  [[ -n "$TARGET_RUN_ID" ]] && printf "  Target run ID: %s\n" "$TARGET_RUN_ID"
   [[ -n "$RUN_FILTER" ]] && printf "  Run filter: %s\n" "$RUN_FILTER"
   printf "  Dry run: %s\n" "$([[ "$DRY_RUN" -eq 1 ]] && printf yes || printf no)"
 
@@ -701,7 +770,9 @@ delete_runs() {
     return 0
   fi
 
-  if [[ -n "$RUN_FILTER" ]]; then
+  if [[ -n "$TARGET_RUN_ID" ]]; then
+    info "Deleting workflow run $TARGET_RUN_ID"
+  elif [[ -n "$RUN_FILTER" ]]; then
     info "Deleting $total workflow runs matching \"$RUN_FILTER\""
   else
     info "Deleting $total workflow runs"
@@ -906,6 +977,12 @@ parse_args() {
         DO_RUNS=1
         shift
         ;;
+      --run)
+        [[ $# -ge 2 ]] || die "--run requires a value"
+        TARGET_RUN_ID="$2"
+        DO_RUNS=1
+        shift 2
+        ;;
       --run-filter)
         [[ $# -ge 2 ]] || die "--run-filter requires a value"
         RUN_FILTER="$2"
@@ -965,9 +1042,10 @@ main() {
 
   select_host
   select_account
-  ensure_api_ready
   resolve_repo
+  ensure_api_ready
   select_actions
+  resolve_target_run
   resolve_run_filter
   show_summary
 

@@ -82,6 +82,13 @@ Delete workflow runs only:
 gh-actions-cleanup --repo OWNER/REPO --delete-runs --yes
 ```
 
+Delete one exact run by ID or URL:
+
+```bash
+gh-actions-cleanup --repo OWNER/REPO --run 21023858697 --yes
+gh-actions-cleanup --repo OWNER/REPO --run "https://github.com/OWNER/REPO/actions/runs/21023858697/workflow" --yes
+```
+
 Delete only one run series:
 
 ```bash
@@ -105,7 +112,9 @@ gh-actions-cleanup --repo OWNER/REPO --delete-caches --yes
 - The CLI uses the selected active GitHub account on the selected host.
 - If multiple accounts are authenticated on one host, it can switch using `gh auth switch`.
 - The token in use needs repository and workflow access to delete Actions resources.
-- If the active token is invalid or the GitHub API core rate limit is exhausted, the CLI now stops early and tells you exactly what to fix.
+- You can target one exact workflow run by numeric ID or by pasting the GitHub run URL.
+- If the GitHub API core rate limit is exhausted, the CLI stops early and tells you when it resets.
+- If local `gh auth status` looks stale but live GitHub API access still works, the CLI continues and warns instead of blocking.
 - `--dry-run` is the safest way to confirm intended changes before deleting anything.
 - The macOS app uses Terminal for the interactive session and may ask for automation permission the first time it launches.
 
