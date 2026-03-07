@@ -1,8 +1,11 @@
 # GH-Workflow-Clean
 
-`gh-actions-cleanup` is a terminal-first macOS app and CLI for shutting down and cleaning up GitHub Actions usage across repositories.
+`gh-actions-cleanup` is a terminal-first macOS cleanup tool with two delivery modes:
 
-Current release: `0.0.1`
+- a native macOS GUI app
+- the original CLI engine
+
+Current release: `0.0.2`
 
 ## What It Does
 
@@ -14,12 +17,14 @@ Current release: `0.0.1`
 - deletes Actions artifacts
 - deletes Actions caches
 - remembers the last host, account, and repo you used without storing any tokens or secrets
+- keeps the CLI as the source of truth, with the native GUI running the CLI under the hood
 
 ## Requirements
 
 - macOS terminal
 - GitHub CLI (`gh`)
 - a GitHub account authenticated with `gh auth login`
+- Xcode or Command Line Tools if you want the native GUI app built locally from source
 
 ## One-Line Install
 
@@ -36,6 +41,12 @@ gh auth login -h github.com
 gh-actions-cleanup
 ```
 
+Installer behavior:
+
+- the CLI installs everywhere GitHub CLI is available
+- the native GUI app is built automatically when the local Mac has a Swift toolchain
+- if Swift is missing, the installer falls back to CLI-only and tells you how to add the GUI later
+
 ## Install
 
 From the project folder:
@@ -48,7 +59,8 @@ chmod +x gh-actions-cleanup install-gh-actions-cleanup.sh
 By default, the installer:
 
 - installs the terminal command into a writable bin directory
-- installs a macOS app bundle into `~/Applications`
+- installs a native macOS app bundle into `~/Applications`
+- compiles the GUI locally with Swift when the toolchain is available
 - generates the app icon locally during install
 - keeps GitHub authentication in the user's existing `gh` keychain session
 
@@ -71,7 +83,7 @@ Guided mode:
 gh-actions-cleanup
 ```
 
-The app and the CLI start with a W.T.L. menu. In guided mode, the tool:
+The CLI starts with a W.T.L. menu. In guided mode, the tool:
 
 - checks which GitHub hosts are already authenticated
 - asks which account to use
@@ -94,7 +106,17 @@ gh-actions-cleanup --repo OWNER/REPO --all --dry-run --yes
 App launch:
 
 - open `GH Workflow Clean.app` from Finder, Spotlight, or Launchpad
-- the app opens Terminal and starts the W.T.L. guided menu
+- the native app opens a real macOS window
+- the GUI runs the bundled CLI in the background and streams the output into a log panel
+- the GUI includes buttons to open GitHub login or the raw CLI flow in Terminal when needed
+
+## GUI Highlights
+
+- native macOS window with W.T.L. branding
+- host picker, account picker, and repo/URL input
+- toggles for full cleanup, runs, workflows, artifacts, caches, and dry-run
+- live output panel that shows the same CLI messages you would get in Terminal
+- login and CLI fallback buttons so users can stay in the secure `gh` auth flow
 
 ## Common Commands
 
@@ -147,6 +169,7 @@ gh-actions-cleanup --repo OWNER/REPO --delete-caches --yes
 
 - Users must authenticate first with `gh auth login -h <host>`.
 - The CLI uses the selected active GitHub account on the selected host.
+- The GUI uses the same `gh` login state and the same bundled CLI engine.
 - If multiple accounts are authenticated on one host, it can switch using `gh auth switch` and restore the prior active account when the session ends.
 - The tool does not embed, print, or save GitHub tokens.
 - The token in use needs repository and workflow access to delete Actions resources.
@@ -154,7 +177,7 @@ gh-actions-cleanup --repo OWNER/REPO --delete-caches --yes
 - If the GitHub API core rate limit is exhausted, the CLI stops early and tells you when it resets.
 - The tool stores only the last host, account, and repo in `~/Library/Application Support/GH Workflow Clean/last-session.env`.
 - `--dry-run` is the safest way to confirm intended changes before deleting anything.
-- The macOS app uses Terminal for the interactive session and may ask for automation permission the first time it launches.
+- The native GUI app currently targets macOS 12 or newer.
 
 ## Notice
 

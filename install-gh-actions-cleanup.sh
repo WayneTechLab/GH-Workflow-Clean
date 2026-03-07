@@ -6,10 +6,12 @@ APP_NAME="gh-actions-cleanup"
 APP_DISPLAY_NAME="GH Workflow Clean"
 APP_BUNDLE_NAME="${APP_DISPLAY_NAME}.app"
 APP_BUNDLE_ID="com.waynetechlab.ghworkflowclean"
-APP_VERSION="0.0.1"
+APP_EXECUTABLE_NAME="GHWorkflowCleanGUI"
+APP_VERSION="0.0.2"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
+SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
 SOURCE_ICON="${SCRIPT_DIR}/assets/app-icon.svg"
 
 INSTALL_CLI=1
@@ -25,14 +27,14 @@ die() {
 
 usage() {
   cat <<EOF
-Install ${APP_NAME} as a terminal command and/or a macOS app bundle.
+Install ${APP_NAME} as a terminal command and/or a native macOS app bundle.
 
 Usage:
   ./install-gh-actions-cleanup.sh [options]
 
 Options:
   --cli-only           Install only the terminal command
-  --app-only           Install only the macOS app bundle
+  --app-only           Install only the native macOS GUI app bundle
   --cli-dir DIR        Override the command install directory
   --app-dir DIR        Override the app install directory
   --help               Show this help text
@@ -40,6 +42,10 @@ Options:
 Defaults:
   - command install: best writable path from /opt/homebrew/bin, /usr/local/bin, ~/.local/bin, ~/bin
   - app install: ~/Applications
+
+Notes:
+  - the CLI has no GUI build dependency
+  - the GUI app is compiled locally with the Swift toolchain on macOS
 EOF
 }
 
@@ -49,6 +55,10 @@ require_command() {
 
 require_macos() {
   [[ "$(uname -s)" == "Darwin" ]] || die "This installer currently supports macOS only"
+}
+
+has_swift_toolchain() {
+  command -v xcrun >/dev/null 2>&1 && xcrun --find swiftc >/dev/null 2>&1
 }
 
 register_temp_dir() {
@@ -176,7 +186,7 @@ write_info_plist() {
   <key>CFBundleDisplayName</key>
   <string>${APP_DISPLAY_NAME}</string>
   <key>CFBundleExecutable</key>
-  <string>launcher</string>
+  <string>${APP_EXECUTABLE_NAME}</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
@@ -192,7 +202,9 @@ write_info_plist() {
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>LSMinimumSystemVersion</key>
-  <string>11.0</string>
+  <string>12.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
   <key>NSHumanReadableCopyright</key>
   <string>Copyright 2026 Wayne Tech Lab LLC</string>
 </dict>
@@ -200,36 +212,26 @@ write_info_plist() {
 EOF
 }
 
-write_launcher() {
-  local launcher_path="$1"
+build_gui_executable() {
+  local target_path="$1"
+  local target_arch=""
 
-  cat >"$launcher_path" <<'EOF'
-#!/usr/bin/env bash
+  require_command xcrun
+  xcrun --find swiftc >/dev/null 2>&1 || die "Swift toolchain not found. Install Xcode or Command Line Tools to build the GUI app."
 
-set -euo pipefail
+  [[ -f "$SOURCE_GUI" ]] || die "Cannot find GUI source at $SOURCE_GUI"
+  target_arch="$(uname -m)"
 
-APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CLI_PATH="$APP_ROOT/Resources/gh-actions-cleanup"
+  xcrun swiftc \
+    -parse-as-library \
+    -O \
+    -target "${target_arch}-apple-macos12.0" \
+    -framework SwiftUI \
+    -framework AppKit \
+    "$SOURCE_GUI" \
+    -o "$target_path"
 
-if [[ ! -x "$CLI_PATH" ]]; then
-  /usr/bin/osascript -e 'display alert "GH Workflow Clean" message "Bundled CLI not found inside the app."' >/dev/null 2>&1 || true
-  exit 1
-fi
-
-/usr/bin/osascript - "$CLI_PATH" <<'OSA'
-on run argv
-  set cliPath to item 1 of argv
-  set innerCommand to "clear; " & quoted form of cliPath & "; EXIT_CODE=$?; printf '\n'; if [ $EXIT_CODE -eq 0 ]; then echo 'GH Workflow Clean finished.'; else echo \"GH Workflow Clean exited with code $EXIT_CODE.\"; fi"
-  set commandLine to "/bin/bash -lc " & quoted form of innerCommand
-  tell application "Terminal"
-    activate
-    do script commandLine
-  end tell
-end run
-OSA
-EOF
-
-  chmod +x "$launcher_path"
+  chmod +x "$target_path"
 }
 
 install_app_bundle() {
@@ -239,10 +241,10 @@ install_app_bundle() {
   local resources_dir=""
   local macos_dir=""
   local icon_icns=""
-
-  require_command osascript
+  local executable_path=""
 
   [[ -f "$SOURCE_SCRIPT" ]] || die "Cannot find ${APP_NAME} in ${SCRIPT_DIR}"
+  [[ -f "$SOURCE_GUI" ]] || die "Cannot find GUI source in ${SCRIPT_DIR}"
 
   app_dir="$(pick_app_install_dir)"
   bundle_path="$app_dir/$APP_BUNDLE_NAME"
@@ -264,9 +266,10 @@ install_app_bundle() {
   cp "$icon_icns" "$resources_dir/AppIcon.icns"
 
   write_info_plist "$contents_dir/Info.plist"
-  write_launcher "$macos_dir/launcher"
+  executable_path="$macos_dir/$APP_EXECUTABLE_NAME"
+  build_gui_executable "$executable_path"
 
-  printf "[ok] Installed macOS app: %s\n" "$bundle_path"
+  printf "[ok] Installed native macOS app: %s\n" "$bundle_path"
   printf "[info] Open it from Finder, Spotlight, or Launchpad: %s\n" "$APP_DISPLAY_NAME"
 }
 
@@ -310,6 +313,16 @@ main() {
   trap cleanup_temp_dirs EXIT
   parse_args "$@"
   require_macos
+
+  if [[ "$INSTALL_APP" -eq 1 ]] && ! has_swift_toolchain; then
+    if [[ "$INSTALL_CLI" -eq 1 ]]; then
+      printf "[warn] Swift toolchain not found. Installing CLI only.\n"
+      printf "[info] Install Xcode or Command Line Tools, then rerun with --app-only if you want the native GUI app.\n"
+      INSTALL_APP=0
+    else
+      die "Swift toolchain not found. Install Xcode or Command Line Tools to build the native GUI app."
+    fi
+  fi
 
   if [[ "$INSTALL_CLI" -eq 1 ]]; then
     install_cli

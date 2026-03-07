@@ -49,12 +49,13 @@ main() {
   fi
 
   TMP_DIR="$(mktemp -d /tmp/gh-workflow-clean-install.XXXXXX)"
-  mkdir -p "$TMP_DIR/assets"
+  mkdir -p "$TMP_DIR/assets" "$TMP_DIR/macos"
 
   info "Downloading ${REPO_OWNER}/${REPO_NAME} (${REPO_REF})"
   download_file "gh-actions-cleanup" "$TMP_DIR/gh-actions-cleanup"
   download_file "install-gh-actions-cleanup.sh" "$TMP_DIR/install-gh-actions-cleanup.sh"
   download_file "assets/app-icon.svg" "$TMP_DIR/assets/app-icon.svg"
+  download_file "macos/GHWorkflowCleanGUI.swift" "$TMP_DIR/macos/GHWorkflowCleanGUI.swift"
 
   chmod +x "$TMP_DIR/gh-actions-cleanup" "$TMP_DIR/install-gh-actions-cleanup.sh"
 
