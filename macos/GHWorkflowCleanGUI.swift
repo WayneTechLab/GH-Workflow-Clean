@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.7"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.8"
 private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
 private let defaultSearchPaths = [
@@ -1138,49 +1138,20 @@ struct HeaderPanel: View {
   let lastSessionSummary: String?
   let statusTitle: String
   let statusKind: StatusKind
+  let compact: Bool
 
   var body: some View {
-    HStack(alignment: .center, spacing: 22) {
-      if let icon {
-        Image(nsImage: icon)
-          .resizable()
-          .aspectRatio(contentMode: .fit)
-          .frame(width: 92, height: 92)
-          .shadow(color: .black.opacity(0.35), radius: 24, y: 14)
-      }
-
-      VStack(alignment: .leading, spacing: 10) {
-        Text("W.T.L.")
-          .font(.system(size: 14, weight: .semibold, design: .rounded))
-          .tracking(2.4)
-          .foregroundStyle(DashboardTheme.accent)
-
-        Text(appTitle)
-          .font(.system(size: 34, weight: .bold, design: .rounded))
-          .foregroundStyle(DashboardTheme.text)
-
-        Text("Native macOS SwiftUI control panel for GitHub Actions cleanup.")
-          .font(.system(size: 14, weight: .medium, design: .rounded))
-          .foregroundStyle(DashboardTheme.muted)
-      }
-
-      Spacer(minLength: 20)
-
-      VStack(alignment: .trailing, spacing: 12) {
-        HStack(spacing: 10) {
-          PillBadge(text: "Native SwiftUI", tint: DashboardTheme.accent)
-          PillBadge(text: "CLI Engine", tint: DashboardTheme.success)
-          PillBadge(text: "Version \(appVersion)", tint: DashboardTheme.warning)
+    Group {
+      if compact {
+        VStack(alignment: .leading, spacing: 18) {
+          titleBlock
+          statusBlock(alignment: .leading)
         }
-
-        Text(statusTitle)
-          .font(.system(size: 13, weight: .bold, design: .rounded))
-          .foregroundStyle(statusKind.tint)
-
-        if let lastSessionSummary {
-          Text(lastSessionSummary)
-            .font(.system(size: 12, weight: .medium, design: .rounded))
-            .foregroundStyle(DashboardTheme.subtle)
+      } else {
+        HStack(alignment: .center, spacing: 22) {
+          titleBlock
+          Spacer(minLength: 20)
+          statusBlock(alignment: .trailing)
         }
       }
     }
@@ -1199,6 +1170,89 @@ struct HeaderPanel: View {
             .stroke(DashboardTheme.border, lineWidth: 1)
         )
     )
+  }
+
+  @ViewBuilder
+  private var titleBlock: some View {
+    HStack(alignment: .center, spacing: 22) {
+      if let icon {
+        Image(nsImage: icon)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .frame(width: compact ? 74 : 92, height: compact ? 74 : 92)
+          .shadow(color: .black.opacity(0.35), radius: 24, y: 14)
+      }
+
+      VStack(alignment: .leading, spacing: 10) {
+        Text("W.T.L.")
+          .font(.system(size: 14, weight: .semibold, design: .rounded))
+          .tracking(2.4)
+          .foregroundStyle(DashboardTheme.accent)
+
+        Text(appTitle)
+          .font(.system(size: compact ? 28 : 34, weight: .bold, design: .rounded))
+          .foregroundStyle(DashboardTheme.text)
+          .lineLimit(2)
+
+        Text("Native macOS SwiftUI control panel for GitHub Actions cleanup.")
+          .font(.system(size: 14, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.muted)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func statusBlock(alignment: HorizontalAlignment) -> some View {
+    VStack(alignment: alignment, spacing: 12) {
+      HStack(spacing: 10) {
+        PillBadge(text: "Native SwiftUI", tint: DashboardTheme.accent)
+        PillBadge(text: "CLI Engine", tint: DashboardTheme.success)
+        PillBadge(text: "Version \(appVersion)", tint: DashboardTheme.warning)
+      }
+
+      Text(statusTitle)
+        .font(.system(size: 13, weight: .bold, design: .rounded))
+        .foregroundStyle(statusKind.tint)
+        .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
+
+      if let lastSessionSummary {
+        Text(lastSessionSummary)
+          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .foregroundStyle(DashboardTheme.subtle)
+          .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
+      }
+    }
+  }
+}
+
+struct DashboardShell<Content: View>: View {
+  @ViewBuilder let content: Content
+
+  init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      content
+    }
+    .padding(20)
+    .background(
+      RoundedRectangle(cornerRadius: 30, style: .continuous)
+        .fill(
+          LinearGradient(
+            colors: [DashboardTheme.panel.opacity(0.94), DashboardTheme.panelAlt.opacity(0.92)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 30, style: .continuous)
+            .stroke(DashboardTheme.border, lineWidth: 1)
+        )
+    )
+    .shadow(color: .black.opacity(0.22), radius: 30, y: 20)
   }
 }
 
@@ -1394,8 +1448,7 @@ struct ContentView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let leftWidth = max(330.0, min(380.0, geometry.size.width * 0.28))
-      let middleWidth = max(360.0, min(430.0, geometry.size.width * 0.31))
+      let contentWidth = max(geometry.size.width - 32, 640)
 
       ZStack {
         LinearGradient(
@@ -1405,257 +1458,300 @@ struct ContentView: View {
         )
         .ignoresSafeArea()
 
-        VStack(spacing: 18) {
-          HeaderPanel(
-            icon: model.bundledIcon,
-            lastSessionSummary: model.lastSessionSummary,
-            statusTitle: model.statusTitle,
-            statusKind: model.statusKind
-          )
+        ScrollView {
+          VStack(spacing: 18) {
+            DashboardShell {
+              HeaderPanel(
+                icon: model.bundledIcon,
+                lastSessionSummary: model.lastSessionSummary,
+                statusTitle: model.statusTitle,
+                statusKind: model.statusKind,
+                compact: contentWidth < 1280
+              )
 
-          HStack(alignment: .top, spacing: 18) {
-            leftRail
-              .frame(width: leftWidth)
-
-            middleRail
-              .frame(width: middleWidth)
-
-            rightRail
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              dashboardLayout(for: contentWidth)
+            }
           }
-          .frame(maxHeight: .infinity)
+          .padding(16)
+          .frame(maxWidth: 1720)
+          .frame(maxWidth: .infinity)
         }
-        .padding(20)
       }
     }
-    .frame(minWidth: 1380, minHeight: 880)
+    .frame(minWidth: 960, minHeight: 760)
     .preferredColorScheme(.dark)
   }
 
-  private var leftRail: some View {
-    VStack(alignment: .leading, spacing: 18) {
-      PanelCard(title: "GitHub Auth", subtitle: "Clear account state, login controls, and fixed-value handling.") {
-        BannerCard(
-          title: model.authHeadline,
-          detail: "\(model.authSummary)\n\(model.authActionHint)",
-          kind: model.isAuthenticated ? .ready : .warning
-        )
-
-        if model.availableHosts.count > 1 {
-          VStack(alignment: .leading, spacing: 6) {
-            FieldLabel(text: "Detected GitHub Hosts")
-            Picker("", selection: $model.host) {
-              ForEach(model.availableHosts, id: \.self) { host in
-                Text(host).tag(host)
-              }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
-          }
-        } else if let onlyHost = model.availableHosts.first {
-          FixedValueRow(label: "Detected GitHub Host", value: onlyHost)
+  @ViewBuilder
+  private func dashboardLayout(for width: CGFloat) -> some View {
+    if width >= 1560 {
+      HStack(alignment: .top, spacing: 18) {
+        VStack(alignment: .leading, spacing: 18) {
+          authPanel
+          repositoryPanel
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
 
-        VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "GitHub Host")
-          TextField("github.com", text: $model.host)
-            .textFieldStyle(.plain)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
+        VStack(alignment: .leading, spacing: 18) {
+          cleanupPanel
+          executionPanel
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
 
-        if model.availableAccounts.count > 1 {
-          VStack(alignment: .leading, spacing: 6) {
-            FieldLabel(text: "Authenticated Account")
-            Picker("", selection: $model.account) {
-              ForEach(model.availableAccounts, id: \.self) { account in
-                Text(account).tag(account)
-              }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
-          }
-        } else if let onlyAccount = model.availableAccounts.first {
-          FixedValueRow(label: "Authenticated Account", value: onlyAccount)
-        } else {
-          FixedValueRow(label: "Authenticated Account", value: "No logged-in account found for this host")
-        }
-
-        VStack(alignment: .leading, spacing: 10) {
-          HStack(spacing: 10) {
-            Button("Refresh") {
-              model.refreshAuthStatus()
-            }
-            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
-
-            Button(model.isAuthenticated ? "Re-Login" : "Login") {
-              model.openGitHubLogin()
-            }
-            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: false))
-          }
-
-          Button("Logout Selected Account") {
-            model.logoutSelectedAccount()
-          }
-          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
-          .disabled(!model.isAuthenticated || model.isLoggingOut || model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
+        logPanel(minHeight: 720)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
       }
+    } else if width >= 1160 {
+      VStack(alignment: .leading, spacing: 18) {
+        HStack(alignment: .top, spacing: 18) {
+          authPanel
+            .frame(maxWidth: .infinity, alignment: .topLeading)
 
-      PanelCard(title: "Repository Targets", subtitle: "Browse repositories for the selected account or owner, then check one, many, or all.") {
-        VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "Owner or Org to List")
-          TextField("Defaults to the selected GitHub account", text: $model.repoOwner)
-            .textFieldStyle(.plain)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
-        }
-
-        HStack(spacing: 10) {
-          Button(model.isLoadingRepos ? "Loading..." : "Load Repositories") {
-            model.fetchAvailableRepos()
+          VStack(alignment: .leading, spacing: 18) {
+            cleanupPanel
+            executionPanel
           }
-          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
-          .disabled(model.isLoadingRepos || !model.isAuthenticated)
-
-          Button("Clear Checked") {
-            model.selectedRepos.removeAll()
-          }
-          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
-          .disabled(model.selectedRepos.isEmpty)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
         }
 
-        Toggle(
-          "Select all loaded repositories (\(model.availableRepos.count))",
-          isOn: Binding(
-            get: { model.areAllLoadedReposSelected },
-            set: { model.setAllLoadedReposSelected($0) }
-          )
-        )
-        .toggleStyle(.switch)
-        .tint(DashboardTheme.success)
-        .foregroundStyle(DashboardTheme.text)
-        .disabled(model.availableRepos.isEmpty)
-
-        VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "Search Loaded Repositories")
-          TextField("Filter by owner, repo name, or visibility", text: $model.repoSearch)
-            .textFieldStyle(.plain)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
-            .disabled(model.availableRepos.isEmpty)
-        }
-
-        BannerCard(
-          title: model.selectedRepoSummary,
-          detail: model.repoCatalogStatus,
-          kind: model.cleanupTargets.isEmpty ? .warning : .ready
-        )
-
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: 10) {
-            if model.filteredRepos.isEmpty {
-              Text(model.availableRepos.isEmpty ? "No repositories loaded yet." : "No repositories match the current search.")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(DashboardTheme.muted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
-            } else {
-              ForEach(model.filteredRepos) { repo in
-                RepoSelectionRow(
-                  repo: repo,
-                  isSelected: model.selectedRepos.contains(repo.nameWithOwner)
-                ) {
-                  model.toggleRepoSelection(repo)
-                }
-              }
-            }
-          }
-        }
-        .frame(minHeight: 180, idealHeight: 240, maxHeight: 280)
-
-        Divider().overlay(DashboardTheme.border)
-
-        VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "Manual Repository or URL Fallback")
-          TextField("OWNER/REPO or https://github.com/OWNER/REPO", text: $model.repoTarget)
-            .textFieldStyle(.plain)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
-        }
-
-        Text("If one or more repositories are checked above, the manual field is ignored. Use the manual field only when you want a one-off target that is not in the loaded list.")
-          .font(.system(size: 12, weight: .medium, design: .rounded))
-          .foregroundStyle(DashboardTheme.muted)
-          .lineSpacing(2)
+        repositoryPanel
+        logPanel(minHeight: 440)
       }
-
-      Spacer(minLength: 0)
+    } else {
+      VStack(alignment: .leading, spacing: 18) {
+        authPanel
+        repositoryPanel
+        cleanupPanel
+        executionPanel
+        logPanel(minHeight: 320)
+      }
     }
   }
 
-  private var middleRail: some View {
-    VStack(alignment: .leading, spacing: 18) {
-      PanelCard(title: "Cleanup Scope", subtitle: "Single control panel for actions, filters, and destructive state.") {
-        Toggle("Full cleanup", isOn: $model.fullCleanup)
-          .toggleStyle(.switch)
-          .tint(actionToggleTint)
-          .foregroundStyle(DashboardTheme.text)
+  private var authPanel: some View {
+    PanelCard(title: "GitHub Auth", subtitle: "Clear account state, login controls, and fixed-value handling.") {
+      BannerCard(
+        title: model.authHeadline,
+        detail: "\(model.authSummary)\n\(model.authActionHint)",
+        kind: model.isAuthenticated ? .ready : .warning
+      )
 
-        Divider().overlay(DashboardTheme.border)
-
-        Toggle("Disable workflows", isOn: $model.disableWorkflows)
-          .toggleStyle(.switch)
-          .tint(actionToggleTint)
-          .foregroundStyle(DashboardTheme.text)
-          .disabled(model.fullCleanup)
-
-        Toggle("Delete workflow runs", isOn: $model.deleteRuns)
-          .toggleStyle(.switch)
-          .tint(actionToggleTint)
-          .foregroundStyle(DashboardTheme.text)
-          .disabled(model.fullCleanup)
-
-        Toggle("Delete artifacts", isOn: $model.deleteArtifacts)
-          .toggleStyle(.switch)
-          .tint(actionToggleTint)
-          .foregroundStyle(DashboardTheme.text)
-          .disabled(model.fullCleanup)
-
-        Toggle("Delete caches", isOn: $model.deleteCaches)
-          .toggleStyle(.switch)
-          .tint(actionToggleTint)
-          .foregroundStyle(DashboardTheme.text)
-          .disabled(model.fullCleanup)
-
-        Divider().overlay(DashboardTheme.border)
-
-        Toggle("Dry run only", isOn: $model.dryRun)
-          .toggleStyle(.switch)
-          .tint(DashboardTheme.warning)
-          .foregroundStyle(DashboardTheme.text)
-
+      if model.availableHosts.count > 1 {
         VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "Specific Run ID or Run URL")
-          TextField("Optional exact run target", text: $model.runTarget)
-            .textFieldStyle(.plain)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
+          FieldLabel(text: "Detected GitHub Hosts")
+          Picker("", selection: $model.host) {
+            ForEach(model.availableHosts, id: \.self) { host in
+              Text(host).tag(host)
+            }
+          }
+          .labelsHidden()
+          .pickerStyle(.menu)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
         }
-
-        VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "Run Filter")
-          TextField("Optional run name filter", text: $model.runFilter)
-            .textFieldStyle(.plain)
-            .foregroundStyle(DashboardTheme.text)
-            .dashboardFieldStyle()
-        }
+      } else if let onlyHost = model.availableHosts.first {
+        FixedValueRow(label: "Detected GitHub Host", value: onlyHost)
       }
 
+      VStack(alignment: .leading, spacing: 6) {
+        FieldLabel(text: "GitHub Host")
+        TextField("github.com", text: $model.host)
+          .textFieldStyle(.plain)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+      }
+
+      if model.availableAccounts.count > 1 {
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "Authenticated Account")
+          Picker("", selection: $model.account) {
+            ForEach(model.availableAccounts, id: \.self) { account in
+              Text(account).tag(account)
+            }
+          }
+          .labelsHidden()
+          .pickerStyle(.menu)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+        }
+      } else if let onlyAccount = model.availableAccounts.first {
+        FixedValueRow(label: "Authenticated Account", value: onlyAccount)
+      } else {
+        FixedValueRow(label: "Authenticated Account", value: "No logged-in account found for this host")
+      }
+
+      VStack(alignment: .leading, spacing: 10) {
+        HStack(spacing: 10) {
+          Button("Refresh") {
+            model.refreshAuthStatus()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+
+          Button(model.isAuthenticated ? "Re-Login" : "Login") {
+            model.openGitHubLogin()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: false))
+        }
+
+        Button("Logout Selected Account") {
+          model.logoutSelectedAccount()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+        .disabled(!model.isAuthenticated || model.isLoggingOut || model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+  }
+
+  private var repositoryPanel: some View {
+    PanelCard(title: "Repository Targets", subtitle: "Browse repositories for the selected account or owner, then check one, many, or all.") {
+      VStack(alignment: .leading, spacing: 6) {
+        FieldLabel(text: "Owner or Org to List")
+        TextField("Defaults to the selected GitHub account", text: $model.repoOwner)
+          .textFieldStyle(.plain)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+      }
+
+      HStack(spacing: 10) {
+        Button(model.isLoadingRepos ? "Loading..." : "Load Repositories") {
+          model.fetchAvailableRepos()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+        .disabled(model.isLoadingRepos || !model.isAuthenticated)
+
+        Button("Clear Checked") {
+          model.selectedRepos.removeAll()
+        }
+        .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+        .disabled(model.selectedRepos.isEmpty)
+      }
+
+      Toggle(
+        "Select all loaded repositories (\(model.availableRepos.count))",
+        isOn: Binding(
+          get: { model.areAllLoadedReposSelected },
+          set: { model.setAllLoadedReposSelected($0) }
+        )
+      )
+      .toggleStyle(.switch)
+      .tint(DashboardTheme.success)
+      .foregroundStyle(DashboardTheme.text)
+      .disabled(model.availableRepos.isEmpty)
+
+      VStack(alignment: .leading, spacing: 6) {
+        FieldLabel(text: "Search Loaded Repositories")
+        TextField("Filter by owner, repo name, or visibility", text: $model.repoSearch)
+          .textFieldStyle(.plain)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+          .disabled(model.availableRepos.isEmpty)
+      }
+
+      BannerCard(
+        title: model.selectedRepoSummary,
+        detail: model.repoCatalogStatus,
+        kind: model.cleanupTargets.isEmpty ? .warning : .ready
+      )
+
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 10) {
+          if model.filteredRepos.isEmpty {
+            Text(model.availableRepos.isEmpty ? "No repositories loaded yet." : "No repositories match the current search.")
+              .font(.system(size: 13, weight: .medium, design: .rounded))
+              .foregroundStyle(DashboardTheme.muted)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(.top, 4)
+          } else {
+            ForEach(model.filteredRepos) { repo in
+              RepoSelectionRow(
+                repo: repo,
+                isSelected: model.selectedRepos.contains(repo.nameWithOwner)
+              ) {
+                model.toggleRepoSelection(repo)
+              }
+            }
+          }
+        }
+      }
+      .frame(minHeight: 180, idealHeight: 260, maxHeight: 320)
+
+      Divider().overlay(DashboardTheme.border)
+
+      VStack(alignment: .leading, spacing: 6) {
+        FieldLabel(text: "Manual Repository or URL Fallback")
+        TextField("OWNER/REPO or https://github.com/OWNER/REPO", text: $model.repoTarget)
+          .textFieldStyle(.plain)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+      }
+
+      Text("If one or more repositories are checked above, the manual field is ignored. Use the manual field only when you want a one-off target that is not in the loaded list.")
+        .font(.system(size: 12, weight: .medium, design: .rounded))
+        .foregroundStyle(DashboardTheme.muted)
+        .lineSpacing(2)
+    }
+  }
+
+  private var cleanupPanel: some View {
+    PanelCard(title: "Cleanup Scope", subtitle: "Single control panel for actions, filters, and destructive state.") {
+      Toggle("Full cleanup", isOn: $model.fullCleanup)
+        .toggleStyle(.switch)
+        .tint(actionToggleTint)
+        .foregroundStyle(DashboardTheme.text)
+
+      Divider().overlay(DashboardTheme.border)
+
+      Toggle("Disable workflows", isOn: $model.disableWorkflows)
+        .toggleStyle(.switch)
+        .tint(actionToggleTint)
+        .foregroundStyle(DashboardTheme.text)
+        .disabled(model.fullCleanup)
+
+      Toggle("Delete workflow runs", isOn: $model.deleteRuns)
+        .toggleStyle(.switch)
+        .tint(actionToggleTint)
+        .foregroundStyle(DashboardTheme.text)
+        .disabled(model.fullCleanup)
+
+      Toggle("Delete artifacts", isOn: $model.deleteArtifacts)
+        .toggleStyle(.switch)
+        .tint(actionToggleTint)
+        .foregroundStyle(DashboardTheme.text)
+        .disabled(model.fullCleanup)
+
+      Toggle("Delete caches", isOn: $model.deleteCaches)
+        .toggleStyle(.switch)
+        .tint(actionToggleTint)
+        .foregroundStyle(DashboardTheme.text)
+        .disabled(model.fullCleanup)
+
+      Divider().overlay(DashboardTheme.border)
+
+      Toggle("Dry run only", isOn: $model.dryRun)
+        .toggleStyle(.switch)
+        .tint(DashboardTheme.warning)
+        .foregroundStyle(DashboardTheme.text)
+
+      VStack(alignment: .leading, spacing: 6) {
+        FieldLabel(text: "Specific Run ID or Run URL")
+        TextField("Optional exact run target", text: $model.runTarget)
+          .textFieldStyle(.plain)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        FieldLabel(text: "Run Filter")
+        TextField("Optional run name filter", text: $model.runFilter)
+          .textFieldStyle(.plain)
+          .foregroundStyle(DashboardTheme.text)
+          .dashboardFieldStyle()
+      }
+    }
+  }
+
+  private var executionPanel: some View {
+    VStack(alignment: .leading, spacing: 18) {
       SafetyCard(isArmed: $model.safetyArmEnabled, dryRun: model.dryRun)
 
       PanelCard(title: "Execution", subtitle: "The native app runs the bundled CLI engine and keeps the raw terminal fallback available.", compact: true) {
@@ -1688,15 +1784,13 @@ struct ContentView: View {
           .font(.system(size: 12, weight: .semibold, design: .rounded))
           .foregroundStyle(model.safetyArmEnabled ? DashboardTheme.success : DashboardTheme.warning)
       }
-
-      Spacer(minLength: 0)
     }
   }
 
-  private var rightRail: some View {
+  private func logPanel(minHeight: CGFloat) -> some View {
     PanelCard(title: "Live Output", subtitle: "Readable, high-contrast CLI output streamed into the native app.") {
       LogConsoleView(text: model.logText)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: minHeight, maxHeight: minHeight)
         .background(
           RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(DashboardTheme.panelStrong)
@@ -1740,8 +1834,8 @@ final class GHWorkflowCleanAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func configure(_ window: NSWindow) {
-    window.minSize = NSSize(width: 1380, height: 880)
-    window.setContentSize(NSSize(width: 1480, height: 920))
+    window.minSize = NSSize(width: 960, height: 760)
+    window.setContentSize(NSSize(width: 1320, height: 860))
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.toolbarStyle = .unified

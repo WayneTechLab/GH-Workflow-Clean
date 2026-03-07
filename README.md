@@ -5,7 +5,7 @@
 - a native macOS GUI app
 - the original CLI engine
 
-Current release: `0.0.7`
+Current release: `0.0.8`
 
 ## What It Does
 
@@ -122,6 +122,8 @@ App launch:
 
 - native macOS SwiftUI window with a single-screen panel layout
 - high-contrast dark UI with readable text and a unified visual system
+- adaptive dashboard shell that reflows from 3-column to 2-column to 1-column as the window resizes
+- full vertical dashboard scrolling so panels do not run off screen on smaller windows
 - clear GitHub login state banner with host and account readiness
 - repository browser that loads repos from GitHub and supports search, checkmarks, and select-all
 - account/host controls that avoid pointless dropdowns for single fixed items
