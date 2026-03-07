@@ -3,7 +3,7 @@
 set -uo pipefail
 
 APP_NAME="gh-actions-cleanup"
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 HOST=""
 ACCOUNT=""
@@ -713,6 +713,21 @@ count_run_ids() {
   printf "%s\n" "$output" | awk 'NF {count++} END {print count+0}'
 }
 
+delete_run_request() {
+  local run_id="$1"
+  local output=""
+
+  if output="$(gh api --method DELETE --hostname "$HOST" "repos/${OWNER}/${REPO_NAME}/actions/runs/${run_id}" 2>&1)"; then
+    return 0
+  fi
+
+  if [[ "$output" == *"HTTP 404"* ]]; then
+    return 2
+  fi
+
+  return 1
+}
+
 show_summary() {
   local workflow_count=""
   local cache_count=""
@@ -785,11 +800,22 @@ delete_runs() {
       continue
     fi
 
-    if gh api --method DELETE --hostname "$HOST" "repos/${OWNER}/${REPO_NAME}/actions/runs/${id}" >/dev/null 2>&1; then
+    if delete_run_request "$id"; then
       :
     else
-      failed=$((failed + 1))
-      warn "Failed to delete run $id"
+      case $? in
+        2)
+          if [[ -n "$TARGET_RUN_ID" ]]; then
+            info "Workflow run $id is already gone."
+          else
+            info "Workflow run $id was already removed."
+          fi
+          ;;
+        *)
+          failed=$((failed + 1))
+          warn "Failed to delete run $id"
+          ;;
+      esac
     fi
 
     if (( completed % 25 == 0 || completed == total )); then
