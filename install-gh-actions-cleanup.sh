@@ -26,7 +26,7 @@ SOURCE_TOS="${SCRIPT_DIR}/TERMS-OF-SERVICE.md"
 SOURCE_HELP_DIR="${SCRIPT_DIR}/docs"
 SOURCE_PROJECT_INFO="${SCRIPT_DIR}/macos/PROJECT-INFO.md"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.2.4}"
+APP_VERSION="${APP_VERSION:-0.2.5}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -327,6 +327,56 @@ copy_file_if_present() {
   cp "$source_path" "$destination_path"
 }
 
+copy_directory_if_present() {
+  local source_path="$1"
+  local destination_path="$2"
+
+  [[ -d "$source_path" ]] || return 0
+  rm -rf "$destination_path"
+  mkdir -p "$(dirname "$destination_path")"
+  cp -R "$source_path" "$destination_path"
+}
+
+image_dimension_value() {
+  local image_path="$1"
+  local field="$2"
+
+  sips -g "$field" "$image_path" 2>/dev/null | awk -v field="$field" '$1 == field ":" { print $2; exit }'
+}
+
+ensure_square_image() {
+  local image_path="$1"
+  local label="$2"
+  local width=""
+  local height=""
+
+  [[ -f "$image_path" ]] || die "Missing image asset: $image_path"
+
+  width="$(image_dimension_value "$image_path" "pixelWidth")"
+  height="$(image_dimension_value "$image_path" "pixelHeight")"
+
+  [[ -n "$width" && -n "$height" ]] || die "Could not read image dimensions for $label"
+  [[ "$width" == "$height" ]] || die "$label must be square, but found ${width}x${height}"
+}
+
+validate_brand_assets() {
+  local appicon_2x="${SOURCE_ICONSET_DIR}/appicon-512x512@2x.png"
+
+  require_command sips
+
+  [[ -d "$SOURCE_ICONSET_DIR" ]] || die "Cannot find AppIcon source at $SOURCE_ICONSET_DIR"
+  [[ -f "$SOURCE_ICON_1024" ]] || die "Cannot find 1024 icon source at $SOURCE_ICON_1024"
+  [[ -f "$SOURCE_LOGO_CARD" ]] || die "Cannot find square logo source at $SOURCE_LOGO_CARD"
+
+  ensure_square_image "$SOURCE_ICON_1024" "Official 1024 app icon"
+  ensure_square_image "$appicon_2x" "Official AppIcon 512@2x source"
+  ensure_square_image "$SOURCE_LOGO_CARD" "Square logo card"
+
+  if ! cmp -s "$SOURCE_ICON_1024" "$appicon_2x"; then
+    die "Official app icon assets are inconsistent: icon-1024.png does not match AppIcon.appiconset/appicon-512x512@2x.png"
+  fi
+}
+
 copy_help_resources() {
   local resources_dir="$1"
   local help_dir="$resources_dir/Help"
@@ -381,6 +431,7 @@ install_app_bundle() {
 
   [[ -f "$SOURCE_SCRIPT" ]] || die "Cannot find ${APP_NAME} in ${SCRIPT_DIR}"
   [[ -f "$SOURCE_GUI" ]] || die "Cannot find GUI source in ${SCRIPT_DIR}"
+  validate_brand_assets
 
   app_dir="$(pick_app_install_dir)"
   bundle_path="$app_dir/$APP_BUNDLE_NAME"
@@ -404,6 +455,7 @@ install_app_bundle() {
   copy_file_if_present "$SOURCE_LOGO_CARD" "$resources_dir/logo-card-square.png"
   copy_file_if_present "$SOURCE_LOGO_LOCKUP" "$resources_dir/logo-horizontal-lockup.png"
   copy_file_if_present "$SOURCE_ICON_1024" "$resources_dir/icon-1024.png"
+  copy_directory_if_present "$SOURCE_ICONSET_DIR" "$resources_dir/AppIcon.appiconset"
   copy_file_if_present "$SOURCE_HERO" "$resources_dir/hero-2560x1600.png"
   copy_help_resources "$resources_dir"
 

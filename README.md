@@ -19,7 +19,7 @@ Provided by Wayne Tech Lab LLC
 [www.WayneTechLab.com](https://www.WayneTechLab.com)
 
 Repository slug: `GH-Workflow-Clean`  
-Current release: `0.2.4`
+Current release: `0.2.5`
 
 ## Warning
 
@@ -70,6 +70,7 @@ open "/Applications/GH Workflow Clean.app"
 - includes a native in-app multi-page menu for Help, Terms, Security, Brand, Project Info, and About
 - lets the app menu be hidden or shown for focus mode on wide and narrow screens
 - moves GitHub session and run state into a streamlined bottom status bar
+- preserves the official square app icon without crop or resample drift by using the shipped AppIcon set directly
 - stores only the last host, account, and repo for convenience
 - does not store GitHub tokens
 - redacts common token and key patterns from the native app log panel

@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.4"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.5"
 private let companyName = "Wayne Tech Lab LLC"
 private let companyWebsite = "www.WayneTechLab.com"
 private let companyWebsiteURL = "https://www.WayneTechLab.com"
@@ -330,7 +330,11 @@ final class CleanupViewModel: ObservableObject {
   }
 
   var bundledBrandMark: NSImage? {
-    bundledImage(named: "icon-1024.png") ?? bundledImage(named: "logo-card-square.png")
+    if let appIconURL = bundledResourceURL(named: "appicon-512x512@2x.png", subdirectory: "AppIcon.appiconset"),
+       let appIconImage = NSImage(contentsOf: appIconURL) {
+      return appIconImage
+    }
+    return bundledImage(named: "icon-1024.png") ?? bundledImage(named: "logo-card-square.png")
   }
 
   var bundledLockup: NSImage? {
