@@ -94,10 +94,11 @@ main() {
 
   printf "\n"
   info "Installed version: ${REPO_REF}"
+  info "Product: GitHub (Action) Clean-UP Tool by Wayne Tech Lab LLC"
   info "Next steps"
   printf "1. gh auth login -h github.com\n"
   printf "2. gh-actions-cleanup\n"
-  printf "3. Or open /Applications/GH Workflow Clean.app\n"
+  printf "3. Or open \"/Applications/GitHub (Action) Clean-UP Tool.app\"\n"
 }
 
 main "$@"

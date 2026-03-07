@@ -3,17 +3,19 @@
 set -euo pipefail
 
 APP_NAME="gh-actions-cleanup"
-APP_DISPLAY_NAME="GH Workflow Clean"
+APP_DISPLAY_NAME="GitHub (Action) Clean-UP Tool"
 APP_BUNDLE_NAME="${APP_DISPLAY_NAME}.app"
 APP_BUNDLE_ID="com.waynetechlab.ghworkflowclean"
 APP_EXECUTABLE_NAME="GHWorkflowCleanGUI"
+LEGACY_APP_BUNDLE_NAMES=("GH Workflow Clean.app")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
 SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
 SOURCE_ICON="${SCRIPT_DIR}/assets/app-icon.svg"
+SOURCE_TOS="${SCRIPT_DIR}/TERMS-OF-SERVICE.md"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.0.9}"
+APP_VERSION="${APP_VERSION:-0.1.0}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
@@ -117,10 +119,12 @@ remove_existing_cli() {
 remove_existing_apps() {
   local candidate=""
   local bundle_path=""
+  local bundle_name=""
   local -a app_dirs=(
     "/Applications"
     "$HOME/Applications"
   )
+  local -a bundle_names=("$APP_BUNDLE_NAME" "${LEGACY_APP_BUNDLE_NAMES[@]}")
 
   if [[ -n "$APP_TARGET_DIR" ]]; then
     app_dirs+=("$APP_TARGET_DIR")
@@ -129,11 +133,13 @@ remove_existing_apps() {
   stop_running_app
 
   for candidate in "${app_dirs[@]}"; do
-    bundle_path="$candidate/$APP_BUNDLE_NAME"
-    if [[ -d "$bundle_path" ]]; then
-      rm -rf -- "$bundle_path"
-      printf "[info] Removed old app: %s\n" "$bundle_path"
-    fi
+    for bundle_name in "${bundle_names[@]}"; do
+      bundle_path="$candidate/$bundle_name"
+      if [[ -d "$bundle_path" ]]; then
+        rm -rf -- "$bundle_path"
+        printf "[info] Removed old app: %s\n" "$bundle_path"
+      fi
+    done
   done
 }
 
@@ -331,6 +337,9 @@ install_app_bundle() {
   cp "$SOURCE_SCRIPT" "$resources_dir/$APP_NAME"
   chmod +x "$resources_dir/$APP_NAME"
   printf "%s\n" "$APP_VERSION" > "$resources_dir/VERSION"
+  if [[ -f "$SOURCE_TOS" ]]; then
+    cp "$SOURCE_TOS" "$resources_dir/TERMS-OF-SERVICE.md"
+  fi
 
   icon_icns="$(render_icon_icns)"
   cp "$icon_icns" "$resources_dir/AppIcon.icns"

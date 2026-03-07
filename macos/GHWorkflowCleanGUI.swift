@@ -3,10 +3,14 @@ import AppKit
 import Combine
 import UniformTypeIdentifiers
 
-private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.9"
-private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
+private let appTitle = "GitHub (Action) Clean-UP Tool"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+private let companyName = "Wayne Tech Lab LLC"
+private let companyWebsite = "www.WayneTechLab.com"
+private let companyWebsiteURL = "https://www.WayneTechLab.com"
+private let appSupportDir = NSString(string: "~/Library/Application Support/GitHub Action Clean-Up Tool").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
+private let legacyLastSessionFile = NSString(string: "~/Library/Application Support/GH Workflow Clean/last-session.env").expandingTildeInPath
 private let defaultSearchPaths = [
   "/opt/homebrew/bin",
   "/usr/local/bin",
@@ -15,6 +19,25 @@ private let defaultSearchPaths = [
   "/usr/sbin",
   "/sbin"
 ]
+private let defaultTermsOfServiceText = """
+GitHub (Action) Clean-UP Tool
+Provided by Wayne Tech Lab LLC
+www.WayneTechLab.com
+
+Warning! This is a deletion tool. Use at your own risk.
+
+By accepting and using this product, you acknowledge and agree that:
+
+1. This tool is intended only for authorized, professional GitHub Actions cleanup work.
+2. This tool can permanently delete workflow runs, artifacts, caches, and workflow configurations.
+3. You are solely responsible for verifying the GitHub host, account, repository, and cleanup scope before execution.
+4. You will use this software only on repositories, organizations, and accounts you are authorized to manage.
+5. You accept full responsibility for data loss, workflow interruption, billing changes, repository impact, and any other outcome caused by use or misuse of this tool.
+6. This software is provided as-is, without warranties, guarantees, or assurances of fitness for any purpose.
+7. Wayne Tech Lab LLC, its operators, authors, affiliates, and contributors are not liable for damages, losses, claims, or operational impact resulting from use of this software.
+
+If you do not accept these terms, do not use this product.
+"""
 
 struct AuthHostConfig {
   let host: String
@@ -148,7 +171,7 @@ final class CleanupViewModel: ObservableObject {
     }
   }
   @Published var repoCatalogStatus = "Load repositories for the selected GitHub account or owner."
-  @Published var logText = "W.T.L. GUI ready.\n"
+  @Published var logText = "[gui] GitHub (Action) Clean-UP Tool ready.\n"
   @Published var statusTitle = "Checking GitHub CLI"
   @Published var statusDetail = "Loading local GitHub configuration."
   @Published var statusKind: StatusKind = .running
@@ -474,7 +497,7 @@ final class CleanupViewModel: ObservableObject {
       "\(shellQuote(cliPath))",
       "EXIT_CODE=$?",
       "printf '\\n'",
-      "if [ $EXIT_CODE -eq 0 ]; then echo 'GH Workflow Clean finished.'; else echo \"GH Workflow Clean exited with code $EXIT_CODE.\"; fi",
+      "if [ $EXIT_CODE -eq 0 ]; then echo 'GitHub (Action) Clean-UP Tool finished.'; else echo \"GitHub (Action) Clean-UP Tool exited with code $EXIT_CODE.\"; fi",
       "echo",
       "read -r -p 'Press Enter to close this window...' _"
     ].joined(separator: "; ")
@@ -841,7 +864,17 @@ final class CleanupViewModel: ObservableObject {
   }
 
   private func loadLastSession() -> [String: String] {
-    guard let contents = try? String(contentsOfFile: lastSessionFile, encoding: .utf8) else {
+    let sessionPath: String
+
+    if FileManager.default.fileExists(atPath: lastSessionFile) {
+      sessionPath = lastSessionFile
+    } else if FileManager.default.fileExists(atPath: legacyLastSessionFile) {
+      sessionPath = legacyLastSessionFile
+    } else {
+      return [:]
+    }
+
+    guard let contents = try? String(contentsOfFile: sessionPath, encoding: .utf8) else {
       return [:]
     }
 
@@ -1000,6 +1033,16 @@ private func quotedAppleScript(commandLine: String) -> String {
     .replacingOccurrences(of: "\\", with: "\\\\")
     .replacingOccurrences(of: "\"", with: "\\\"")
   return "\"\(escaped)\""
+}
+
+private func bundledTermsOfServiceText() -> String {
+  guard let url = Bundle.main.url(forResource: "TERMS-OF-SERVICE", withExtension: "md"),
+        let contents = try? String(contentsOf: url, encoding: .utf8),
+        contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+    return defaultTermsOfServiceText
+  }
+
+  return contents
 }
 
 private enum DashboardTheme {
@@ -1194,9 +1237,14 @@ struct HeaderPanel: View {
           .foregroundStyle(DashboardTheme.text)
           .lineLimit(2)
 
-        Text("Native macOS SwiftUI control panel for GitHub Actions cleanup.")
+        Text("Professional GitHub Actions deletion and cleanup console for macOS.")
           .font(.system(size: 14, weight: .medium, design: .rounded))
           .foregroundStyle(DashboardTheme.muted)
+          .fixedSize(horizontal: false, vertical: true)
+
+        Text("Provided by \(companyName) · \(companyWebsite)")
+          .font(.system(size: 12, weight: .semibold, design: .rounded))
+          .foregroundStyle(DashboardTheme.subtle)
           .fixedSize(horizontal: false, vertical: true)
       }
     }
@@ -1407,6 +1455,109 @@ struct SafetyCard: View {
   }
 }
 
+struct LaunchWarningSheet: View {
+  @Binding var acceptedRisk: Bool
+  @Binding var acceptedPurpose: Bool
+  let continueAction: () -> Void
+  let quitAction: () -> Void
+
+  private let termsText = bundledTermsOfServiceText()
+
+  var body: some View {
+    ZStack {
+      LinearGradient(
+        colors: [DashboardTheme.canvasTop, DashboardTheme.canvasBottom],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      .ignoresSafeArea()
+
+      ScrollView {
+        VStack(alignment: .leading, spacing: 20) {
+          HStack(alignment: .top, spacing: 18) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .font(.system(size: 28, weight: .bold))
+              .foregroundStyle(DashboardTheme.text)
+              .frame(width: 64, height: 64)
+              .background(DashboardTheme.danger)
+              .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Warning!")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundStyle(DashboardTheme.text)
+
+              Text("This is a deletion tool. Use at your own risk.")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(DashboardTheme.warning)
+
+              Text("\(appTitle) is a professional clean-up tool provided by \(companyName). Review the terms below every time before using the product.")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(DashboardTheme.muted)
+                .lineSpacing(3)
+
+              Link(companyWebsite, destination: URL(string: companyWebsiteURL)!)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+            }
+          }
+
+          PanelCard(title: "Terms of Service", subtitle: "You must accept responsibility and intended-use conditions before the tool unlocks.") {
+            ScrollView {
+              Text(termsText)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundStyle(DashboardTheme.text)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minHeight: 280, maxHeight: 320)
+            .padding(2)
+            .background(
+              RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(DashboardTheme.panelStrong)
+                .overlay(
+                  RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(DashboardTheme.border, lineWidth: 1)
+                )
+            )
+
+            Toggle("I understand this tool can permanently delete GitHub Actions data and I accept full responsibility for its use.", isOn: $acceptedRisk)
+              .toggleStyle(.switch)
+              .tint(DashboardTheme.danger)
+              .foregroundStyle(DashboardTheme.text)
+
+            Toggle("I will use this product only for its intended professional clean-up purpose and only where I am authorized to make these changes.", isOn: $acceptedPurpose)
+              .toggleStyle(.switch)
+              .tint(DashboardTheme.accent)
+              .foregroundStyle(DashboardTheme.text)
+          }
+
+          HStack(spacing: 12) {
+            Button("Quit App") {
+              quitAction()
+            }
+            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+
+            Button("Accept and Continue") {
+              continueAction()
+            }
+            .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.danger, bordered: false))
+            .disabled(!(acceptedRisk && acceptedPurpose))
+          }
+
+          Text("Acceptance is required every time the app is opened.")
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(DashboardTheme.subtle)
+        }
+        .padding(24)
+        .frame(maxWidth: 980)
+        .frame(maxWidth: .infinity)
+      }
+    }
+    .frame(minWidth: 920, minHeight: 760)
+    .preferredColorScheme(.dark)
+  }
+}
+
 struct LogConsoleView: NSViewRepresentable {
   let text: String
 
@@ -1443,6 +1594,9 @@ struct LogConsoleView: NSViewRepresentable {
 
 struct ContentView: View {
   @StateObject private var model = CleanupViewModel()
+  @State private var showLaunchWarning = true
+  @State private var acceptedRisk = false
+  @State private var acceptedPurpose = false
 
   private var actionToggleTint: Color { DashboardTheme.accent }
 
@@ -1480,6 +1634,19 @@ struct ContentView: View {
     }
     .frame(minWidth: 720, minHeight: 620)
     .preferredColorScheme(.dark)
+    .sheet(isPresented: $showLaunchWarning) {
+      LaunchWarningSheet(
+        acceptedRisk: $acceptedRisk,
+        acceptedPurpose: $acceptedPurpose,
+        continueAction: {
+          showLaunchWarning = false
+        },
+        quitAction: {
+          NSApp.terminate(nil)
+        }
+      )
+      .interactiveDismissDisabled(true)
+    }
   }
 
   @ViewBuilder
@@ -1784,9 +1951,9 @@ struct ContentView: View {
           }
           .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
 
-          Button("Clear Log") {
-            model.logText = "W.T.L. GUI ready.\n"
-          }
+        Button("Clear Log") {
+            model.logText = "[gui] \(appTitle) ready.\n"
+        }
           .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.success, bordered: true))
         }
 

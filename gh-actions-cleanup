@@ -3,9 +3,10 @@
 set -uo pipefail
 
 APP_NAME="gh-actions-cleanup"
-VERSION="0.0.9"
-APP_SUPPORT_DIR="$HOME/Library/Application Support/GH Workflow Clean"
+VERSION="0.1.0"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/GitHub Action Clean-Up Tool"
 LAST_SESSION_FILE="$APP_SUPPORT_DIR/last-session.env"
+LEGACY_LAST_SESSION_FILE="$HOME/Library/Application Support/GH Workflow Clean/last-session.env"
 
 HOST=""
 ACCOUNT=""
@@ -103,8 +104,9 @@ show_wtl_banner() {
    \ V  V /      | |    | |___
     \_/\_/       |_|    |_____|
 
- W.T.L. GH Workflow Clean
- Production GitHub Actions Cleanup for macOS
+ W.T.L. GitHub (Action) Clean-UP Tool
+ Professional GitHub Actions cleanup for macOS
+ Provided by Wayne Tech Lab LLC · www.WayneTechLab.com
 EOF
   printf "%s" "$C_RESET"
 }
@@ -126,8 +128,15 @@ load_last_session() {
   local line=""
   local key=""
   local value=""
+  local source_session_file=""
 
-  [[ -f "$LAST_SESSION_FILE" ]] || return 0
+  if [[ -f "$LAST_SESSION_FILE" ]]; then
+    source_session_file="$LAST_SESSION_FILE"
+  elif [[ -f "$LEGACY_LAST_SESSION_FILE" ]]; then
+    source_session_file="$LEGACY_LAST_SESSION_FILE"
+  else
+    return 0
+  fi
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
@@ -138,7 +147,7 @@ load_last_session() {
       ACCOUNT) LAST_ACCOUNT="$value" ;;
       REPO) LAST_REPO_SPEC="$value" ;;
     esac
-  done <"$LAST_SESSION_FILE"
+  done <"$source_session_file"
 }
 
 save_last_session() {
@@ -173,7 +182,9 @@ usage() {
   cat <<EOF
 ${APP_NAME} ${VERSION}
 
+GitHub (Action) Clean-UP Tool
 Interactive GitHub Actions cleanup CLI for macOS terminal use.
+Provided by Wayne Tech Lab LLC · www.WayneTechLab.com
 
 Usage:
   ${APP_NAME} [options]
