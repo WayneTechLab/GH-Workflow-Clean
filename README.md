@@ -5,7 +5,7 @@
 - a native macOS GUI app
 - the original CLI engine
 
-Current release: `0.0.6`
+Current release: `0.0.7`
 
 ## What It Does
 
@@ -123,8 +123,9 @@ App launch:
 - native macOS SwiftUI window with a single-screen panel layout
 - high-contrast dark UI with readable text and a unified visual system
 - clear GitHub login state banner with host and account readiness
+- repository browser that loads repos from GitHub and supports search, checkmarks, and select-all
 - account/host controls that avoid pointless dropdowns for single fixed items
-- repo/URL input, destructive scope toggles, and explicit safety arm switch
+- manual repo/URL fallback plus multi-repo cleanup through the checked repository list
 - logout button for the selected GitHub account
 - live output console with readable CLI logs inside the app
 - login and CLI fallback buttons so users can stay in the secure `gh` auth flow

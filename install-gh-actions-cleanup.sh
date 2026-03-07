@@ -13,7 +13,7 @@ SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
 SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
 SOURCE_ICON="${SCRIPT_DIR}/assets/app-icon.svg"
 APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
-APP_VERSION="${APP_VERSION:-0.0.6}"
+APP_VERSION="${APP_VERSION:-0.0.7}"
 
 INSTALL_CLI=1
 INSTALL_APP=1

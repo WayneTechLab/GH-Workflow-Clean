@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.6"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.7"
 private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
 private let defaultSearchPaths = [
@@ -25,6 +25,38 @@ struct AuthHostConfig {
 struct CommandResult {
   let status: Int32
   let output: String
+}
+
+struct RepoCatalogEntry: Identifiable, Hashable, Decodable {
+  let nameWithOwner: String
+  let visibility: String?
+  let isPrivate: Bool?
+  let updatedAt: String?
+  let url: String?
+
+  var id: String { nameWithOwner }
+
+  var shortName: String {
+    nameWithOwner.split(separator: "/").last.map(String.init) ?? nameWithOwner
+  }
+
+  var owner: String {
+    nameWithOwner.split(separator: "/").dropLast().first.map(String.init) ?? ""
+  }
+
+  var visibilityLabel: String {
+    if let visibility, !visibility.isEmpty {
+      return visibility.uppercased()
+    }
+    return isPrivate == true ? "PRIVATE" : "PUBLIC"
+  }
+
+  var updatedLabel: String {
+    guard let updatedAt, updatedAt.count >= 10 else {
+      return "Updated: unknown"
+    }
+    return "Updated: \(String(updatedAt.prefix(10)))"
+  }
 }
 
 enum StatusKind {
@@ -57,6 +89,8 @@ final class CleanupViewModel: ObservableObject {
   @Published var host = "github.com" {
     didSet {
       if host != oldValue {
+        isAuthenticated = false
+        clearRepoCatalog(resetOwner: false)
         reloadAccountChoices()
         refreshAuthStatus()
         if host != oldValue {
@@ -65,7 +99,19 @@ final class CleanupViewModel: ObservableObject {
       }
     }
   }
-  @Published var account = ""
+  @Published var account = "" {
+    didSet {
+      if account != oldValue {
+        if repoOwner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || repoOwner == oldValue {
+          repoOwner = account
+        }
+        clearRepoCatalog(resetOwner: false)
+        if isAuthenticated && !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          fetchAvailableRepos()
+        }
+      }
+    }
+  }
   @Published var repoTarget = "" {
     didSet {
       if repoTarget != oldValue {
@@ -73,6 +119,14 @@ final class CleanupViewModel: ObservableObject {
       }
     }
   }
+  @Published var repoOwner = "" {
+    didSet {
+      if repoOwner != oldValue {
+        clearRepoCatalog(resetOwner: false)
+      }
+    }
+  }
+  @Published var repoSearch = ""
   @Published var fullCleanup = true
   @Published var disableWorkflows = true
   @Published var deleteRuns = true
@@ -85,6 +139,15 @@ final class CleanupViewModel: ObservableObject {
 
   @Published var availableHosts: [String] = []
   @Published var availableAccounts: [String] = []
+  @Published var availableRepos: [RepoCatalogEntry] = []
+  @Published var selectedRepos: Set<String> = [] {
+    didSet {
+      if selectedRepos != oldValue {
+        safetyArmEnabled = false
+      }
+    }
+  }
+  @Published var repoCatalogStatus = "Load repositories for the selected GitHub account or owner."
   @Published var logText = "W.T.L. GUI ready.\n"
   @Published var statusTitle = "Checking GitHub CLI"
   @Published var statusDetail = "Loading local GitHub configuration."
@@ -92,9 +155,16 @@ final class CleanupViewModel: ObservableObject {
   @Published var isRunning = false
   @Published var isAuthenticated = false
   @Published var isLoggingOut = false
+  @Published var isLoadingRepos = false
 
   private var hostConfigs: [AuthHostConfig] = []
   private var runningProcess: Process?
+  private var pendingRepoTargets: [String] = []
+  private var completedRepoTargets: [String] = []
+  private var failedRepoTargets: [String] = []
+  private var activeRepoTarget = ""
+  private var totalRepoTargets = 0
+  private var cancellationRequested = false
   private let processQueue = DispatchQueue(label: "com.waynetechlab.ghworkflowclean.process", qos: .userInitiated)
 
   init() {
@@ -142,7 +212,7 @@ final class CleanupViewModel: ObservableObject {
       isAuthenticated &&
       !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
       !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-      !repoTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+      !cleanupTargets.isEmpty &&
       (fullCleanup || disableWorkflows || deleteRuns || deleteArtifacts || deleteCaches) &&
       safetyArmEnabled &&
       statusKind != .error
@@ -185,6 +255,49 @@ final class CleanupViewModel: ObservableObject {
     return "Last session: \(accountValue) on \(hostValue) -> \(repoValue)"
   }
 
+  var filteredRepos: [RepoCatalogEntry] {
+    let query = repoSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !query.isEmpty else {
+      return availableRepos
+    }
+
+    return availableRepos.filter { repo in
+      repo.nameWithOwner.lowercased().contains(query) ||
+      repo.shortName.lowercased().contains(query) ||
+      repo.owner.lowercased().contains(query) ||
+      (repo.visibility?.lowercased().contains(query) ?? false)
+    }
+  }
+
+  var cleanupTargets: [String] {
+    if !selectedRepos.isEmpty {
+      return selectedRepos.sorted()
+    }
+
+    let manualTarget = repoTarget.trimmingCharacters(in: .whitespacesAndNewlines)
+    return manualTarget.isEmpty ? [] : [manualTarget]
+  }
+
+  var areAllLoadedReposSelected: Bool {
+    !availableRepos.isEmpty && selectedRepos.count == availableRepos.count
+  }
+
+  var selectedRepoSummary: String {
+    if !selectedRepos.isEmpty {
+      if selectedRepos.count == 1, let only = selectedRepos.first {
+        return "1 repository selected: \(only)"
+      }
+      return "\(selectedRepos.count) repositories selected"
+    }
+
+    let manualTarget = repoTarget.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !manualTarget.isEmpty {
+      return "Manual target: \(manualTarget)"
+    }
+
+    return "No repository selected yet"
+  }
+
   func bootstrap() {
     let session = loadLastSession()
     if let savedHost = session["HOST"], !savedHost.isEmpty {
@@ -199,6 +312,14 @@ final class CleanupViewModel: ObservableObject {
       } else {
         repoTarget = savedRepo
       }
+      let components = repoTarget.split(separator: "/")
+      if components.count >= 2 {
+        repoOwner = String(components[0])
+      }
+    }
+
+    if repoOwner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      repoOwner = account
     }
 
     reloadAuthInventory()
@@ -249,6 +370,17 @@ final class CleanupViewModel: ObservableObject {
     }
   }
 
+  func clearRepoCatalog(resetOwner: Bool) {
+    availableRepos = []
+    selectedRepos = []
+    repoSearch = ""
+    repoCatalogStatus = "Load repositories for the selected GitHub account or owner."
+
+    if resetOwner {
+      repoOwner = ""
+    }
+  }
+
   func refreshAuthStatus() {
     guard let ghPath else {
       isAuthenticated = false
@@ -286,13 +418,18 @@ final class CleanupViewModel: ObservableObject {
         let resolvedAccount = self.account.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.status == 0 {
           self.isAuthenticated = !resolvedAccount.isEmpty || self.selectedHostConfig?.activeUser != nil
+          if self.repoOwner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            self.repoOwner = resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "") : resolvedAccount
+          }
           self.statusKind = .ready
           self.statusTitle = "GH TOKEN LOGGED IN @ \(selectedHost)"
           self.statusDetail = cleaned.isEmpty
             ? "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready."
             : "User \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) on account \(resolvedAccount.isEmpty ? (self.selectedHostConfig?.activeUser ?? "Unknown") : resolvedAccount) ready.\n\(cleaned)"
+          self.fetchAvailableRepos()
         } else {
           self.isAuthenticated = false
+          self.clearRepoCatalog(resetOwner: false)
           self.statusKind = .warning
           self.statusTitle = "GH TOKEN NOT LOGGED IN @ \(selectedHost)"
           self.statusDetail = cleaned.isEmpty
@@ -346,6 +483,8 @@ final class CleanupViewModel: ObservableObject {
   }
 
   func cancelRun() {
+    cancellationRequested = true
+    pendingRepoTargets.removeAll()
     runningProcess?.terminate()
   }
 
@@ -386,8 +525,102 @@ final class CleanupViewModel: ObservableObject {
           self.appendLog(cleaned + "\n")
         }
         self.safetyArmEnabled = false
+        self.clearRepoCatalog(resetOwner: false)
         self.reloadAuthInventory()
         self.refreshAuthStatus()
+      }
+    }
+  }
+
+  func setAllLoadedReposSelected(_ enabled: Bool) {
+    if enabled {
+      selectedRepos = Set(availableRepos.map(\.nameWithOwner))
+    } else {
+      selectedRepos.removeAll()
+    }
+  }
+
+  func toggleRepoSelection(_ repo: RepoCatalogEntry) {
+    if selectedRepos.contains(repo.nameWithOwner) {
+      selectedRepos.remove(repo.nameWithOwner)
+    } else {
+      selectedRepos.insert(repo.nameWithOwner)
+    }
+  }
+
+  func fetchAvailableRepos() {
+    guard let ghPath else {
+      repoCatalogStatus = "GitHub CLI was not found."
+      return
+    }
+
+    let selectedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+    let targetOwner = repoOwner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? account.trimmingCharacters(in: .whitespacesAndNewlines)
+      : repoOwner.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    guard !selectedHost.isEmpty else {
+      repoCatalogStatus = "Enter a GitHub host first."
+      return
+    }
+
+    guard isAuthenticated else {
+      repoCatalogStatus = "Log into GitHub CLI first, then load repositories."
+      return
+    }
+
+    guard !targetOwner.isEmpty else {
+      repoCatalogStatus = "Enter an owner or org to list repositories."
+      return
+    }
+
+    isLoadingRepos = true
+    repoCatalogStatus = "Loading repositories for \(targetOwner) on \(selectedHost)..."
+    appendLog("[gui] Loading repositories for \(targetOwner) on \(selectedHost)\n")
+
+    var environment = baseEnvironment()
+    environment["GH_HOST"] = selectedHost
+
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      guard let self else { return }
+      let result = Self.runCommand(
+        executable: ghPath,
+        arguments: [
+          "repo", "list", targetOwner,
+          "--limit", "1000",
+          "--json", "nameWithOwner,visibility,isPrivate,updatedAt,url"
+        ],
+        environment: environment
+      )
+
+      DispatchQueue.main.async {
+        self.isLoadingRepos = false
+        let cleaned = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard result.status == 0 else {
+          self.availableRepos = []
+          self.selectedRepos.removeAll()
+          self.repoCatalogStatus = cleaned.isEmpty
+            ? "Failed to load repositories for \(targetOwner)."
+            : cleaned
+          return
+        }
+
+        let data = Data(result.output.utf8)
+        do {
+          let decoded = try JSONDecoder().decode([RepoCatalogEntry].self, from: data)
+          self.availableRepos = decoded.sorted { $0.nameWithOwner.localizedCaseInsensitiveCompare($1.nameWithOwner) == .orderedAscending }
+          self.selectedRepos = self.selectedRepos.intersection(Set(self.availableRepos.map(\.nameWithOwner)))
+          if self.availableRepos.isEmpty {
+            self.repoCatalogStatus = "No repositories found for \(targetOwner) on \(selectedHost)."
+          } else {
+            self.repoCatalogStatus = "Loaded \(self.availableRepos.count) repositories for \(targetOwner)."
+          }
+        } catch {
+          self.availableRepos = []
+          self.selectedRepos.removeAll()
+          self.repoCatalogStatus = "Failed to decode repository list: \(error.localizedDescription)"
+        }
       }
     }
   }
@@ -407,16 +640,10 @@ final class CleanupViewModel: ObservableObject {
       return
     }
 
-    let resolvedHost = repoHostOverride(from: repoTarget) ?? host.trimmingCharacters(in: .whitespacesAndNewlines)
-    if resolvedHost != host, !resolvedHost.isEmpty {
-      host = resolvedHost
-      reloadAuthInventory()
-    }
-
     let selectedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines)
-    let selectedRepo = repoTarget.trimmingCharacters(in: .whitespacesAndNewlines)
+    let selectedTargets = cleanupTargets
 
-    guard !resolvedHost.isEmpty else {
+    guard !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       statusKind = .error
       statusTitle = "GitHub Host Required"
       statusDetail = "Select or enter a GitHub host before running cleanup."
@@ -430,10 +657,10 @@ final class CleanupViewModel: ObservableObject {
       return
     }
 
-    guard !selectedRepo.isEmpty else {
+    guard !selectedTargets.isEmpty else {
       statusKind = .warning
       statusTitle = "Repository Required"
-      statusDetail = "Enter OWNER/REPO, HOST/OWNER/REPO, or a full GitHub repo URL."
+      statusDetail = "Enter a manual repo target or check one or more repositories from the repo browser."
       return
     }
 
@@ -451,15 +678,36 @@ final class CleanupViewModel: ObservableObject {
       return
     }
 
+    pendingRepoTargets = selectedTargets
+    completedRepoTargets = []
+    failedRepoTargets = []
+    activeRepoTarget = ""
+    totalRepoTargets = selectedTargets.count
+    cancellationRequested = false
     statusKind = .running
     statusTitle = dryRun ? "Running Dry Run" : "Running Cleanup"
-    statusDetail = "\(selectedAccount) -> \(selectedRepo)"
-    logText = "[gui] Starting cleanup for \(selectedRepo) on \(resolvedHost) with \(selectedAccount)\n"
+    statusDetail = "\(selectedAccount) -> \(selectedTargets.count) target(s)"
+    logText = "[gui] Starting cleanup across \(selectedTargets.count) target(s) with \(selectedAccount)\n"
+    isRunning = true
+    launchCleanup(for: pendingRepoTargets.removeFirst(), using: cliPath, account: selectedAccount)
+  }
+
+  private func launchCleanup(for repoTarget: String, using cliPath: String, account selectedAccount: String) {
+    let resolvedHost = repoHostOverride(from: repoTarget) ?? host.trimmingCharacters(in: .whitespacesAndNewlines)
+    activeRepoTarget = repoTarget
+    let currentIndex = completedRepoTargets.count + failedRepoTargets.count + 1
+
+    statusKind = .running
+    statusTitle = dryRun ? "Running Dry Run" : "Running Cleanup"
+    statusDetail = totalRepoTargets > 1
+      ? "\(selectedAccount) -> \(currentIndex)/\(totalRepoTargets): \(repoTarget)"
+      : "\(selectedAccount) -> \(repoTarget)"
+    appendLog("[gui] [\(currentIndex)/\(totalRepoTargets)] Starting cleanup for \(repoTarget) on \(resolvedHost) with \(selectedAccount)\n")
 
     var arguments = [
       "--host", resolvedHost,
       "--account", selectedAccount,
-      "--repo", selectedRepo,
+      "--repo", repoTarget,
       "--yes"
     ]
 
@@ -484,7 +732,6 @@ final class CleanupViewModel: ObservableObject {
       arguments.append("--dry-run")
     }
 
-    isRunning = true
     let environment = baseEnvironment()
     let pipe = Pipe()
     let process = Process()
@@ -518,20 +765,25 @@ final class CleanupViewModel: ObservableObject {
         if !tailText.isEmpty {
           self.appendLog(tailText)
         }
-        self.isRunning = false
         self.runningProcess = nil
 
+        if self.cancellationRequested {
+          self.finishCleanupQueue(cancelled: true)
+          return
+        }
+
         if terminated.terminationStatus == 0 {
-          self.safetyArmEnabled = false
-          self.statusKind = .ready
-          self.statusTitle = self.dryRun ? "Dry Run Finished" : "Cleanup Finished"
-          self.statusDetail = "The CLI completed successfully."
-          self.reloadAuthInventory()
+          self.completedRepoTargets.append(repoTarget)
         } else {
-          self.safetyArmEnabled = false
-          self.statusKind = .error
-          self.statusTitle = "Cleanup Failed"
-          self.statusDetail = "The CLI exited with code \(terminated.terminationStatus). Review the log output."
+          self.failedRepoTargets.append(repoTarget)
+          self.appendLog("[gui] Cleanup failed for \(repoTarget) with exit code \(terminated.terminationStatus)\n")
+        }
+
+        if let nextTarget = self.pendingRepoTargets.first {
+          self.pendingRepoTargets.removeFirst()
+          self.launchCleanup(for: nextTarget, using: cliPath, account: selectedAccount)
+        } else {
+          self.finishCleanupQueue(cancelled: false)
         }
       }
     }
@@ -541,15 +793,47 @@ final class CleanupViewModel: ObservableObject {
         try process.run()
       } catch {
         DispatchQueue.main.async {
-          self.isRunning = false
-          self.runningProcess = nil
-          self.statusKind = .error
-          self.statusTitle = "Failed to Launch Cleanup"
-          self.statusDetail = error.localizedDescription
+          self.failedRepoTargets.append(repoTarget)
           self.appendLog("[gui] Failed to launch cleanup: \(error.localizedDescription)\n")
+          if let nextTarget = self.pendingRepoTargets.first {
+            self.pendingRepoTargets.removeFirst()
+            self.launchCleanup(for: nextTarget, using: cliPath, account: selectedAccount)
+          } else {
+            self.finishCleanupQueue(cancelled: false)
+          }
         }
       }
     }
+  }
+
+  private func finishCleanupQueue(cancelled: Bool) {
+    isRunning = false
+    runningProcess = nil
+    safetyArmEnabled = false
+    let completedCount = completedRepoTargets.count
+    let failedCount = failedRepoTargets.count
+    let summary = "Completed \(completedCount) of \(totalRepoTargets). Failed: \(failedCount)."
+
+    if cancelled {
+      statusKind = .warning
+      statusTitle = "Cleanup Cancelled"
+      statusDetail = summary
+      appendLog("[gui] Cleanup cancelled by user.\n")
+    } else if failedCount == 0 {
+      statusKind = .ready
+      statusTitle = dryRun ? "Dry Run Finished" : "Cleanup Finished"
+      statusDetail = summary
+    } else {
+      statusKind = .error
+      statusTitle = "Cleanup Finished With Errors"
+      statusDetail = summary
+    }
+
+    pendingRepoTargets.removeAll()
+    activeRepoTarget = ""
+    totalRepoTargets = 0
+    cancellationRequested = false
+    reloadAuthInventory()
   }
 
   private func appendLog(_ text: String) {
@@ -945,6 +1229,58 @@ struct FixedValueRow: View {
   }
 }
 
+struct RepoSelectionRow: View {
+  let repo: RepoCatalogEntry
+  let isSelected: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(alignment: .center, spacing: 12) {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundStyle(isSelected ? DashboardTheme.success : DashboardTheme.subtle)
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text(repo.shortName)
+            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .foregroundStyle(DashboardTheme.text)
+            .lineLimit(1)
+
+          Text(repo.nameWithOwner)
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+            .foregroundStyle(DashboardTheme.muted)
+            .lineLimit(1)
+        }
+
+        Spacer(minLength: 12)
+
+        VStack(alignment: .trailing, spacing: 4) {
+          Text(repo.visibilityLabel)
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .foregroundStyle(repo.isPrivate == true ? DashboardTheme.warning : DashboardTheme.accent)
+
+          Text(repo.updatedLabel)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(DashboardTheme.subtle)
+        }
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .fill(isSelected ? DashboardTheme.field.opacity(1.0) : DashboardTheme.panelStrong)
+          .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .stroke(isSelected ? DashboardTheme.success.opacity(0.45) : DashboardTheme.border, lineWidth: 1)
+          )
+      )
+    }
+    .buttonStyle(.plain)
+  }
+}
+
 struct DashboardButtonStyle: ButtonStyle {
   let tint: Color
   let bordered: Bool
@@ -1170,16 +1506,89 @@ struct ContentView: View {
         }
       }
 
-      PanelCard(title: "Repository Target", subtitle: "Paste OWNER/REPO, HOST/OWNER/REPO, or a full GitHub repo URL.") {
+      PanelCard(title: "Repository Targets", subtitle: "Browse repositories for the selected account or owner, then check one, many, or all.") {
         VStack(alignment: .leading, spacing: 6) {
-          FieldLabel(text: "Repository or URL")
+          FieldLabel(text: "Owner or Org to List")
+          TextField("Defaults to the selected GitHub account", text: $model.repoOwner)
+            .textFieldStyle(.plain)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+        }
+
+        HStack(spacing: 10) {
+          Button(model.isLoadingRepos ? "Loading..." : "Load Repositories") {
+            model.fetchAvailableRepos()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.accent, bordered: true))
+          .disabled(model.isLoadingRepos || !model.isAuthenticated)
+
+          Button("Clear Checked") {
+            model.selectedRepos.removeAll()
+          }
+          .buttonStyle(DashboardButtonStyle(tint: DashboardTheme.warning, bordered: true))
+          .disabled(model.selectedRepos.isEmpty)
+        }
+
+        Toggle(
+          "Select all loaded repositories (\(model.availableRepos.count))",
+          isOn: Binding(
+            get: { model.areAllLoadedReposSelected },
+            set: { model.setAllLoadedReposSelected($0) }
+          )
+        )
+        .toggleStyle(.switch)
+        .tint(DashboardTheme.success)
+        .foregroundStyle(DashboardTheme.text)
+        .disabled(model.availableRepos.isEmpty)
+
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "Search Loaded Repositories")
+          TextField("Filter by owner, repo name, or visibility", text: $model.repoSearch)
+            .textFieldStyle(.plain)
+            .foregroundStyle(DashboardTheme.text)
+            .dashboardFieldStyle()
+            .disabled(model.availableRepos.isEmpty)
+        }
+
+        BannerCard(
+          title: model.selectedRepoSummary,
+          detail: model.repoCatalogStatus,
+          kind: model.cleanupTargets.isEmpty ? .warning : .ready
+        )
+
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 10) {
+            if model.filteredRepos.isEmpty {
+              Text(model.availableRepos.isEmpty ? "No repositories loaded yet." : "No repositories match the current search.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(DashboardTheme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            } else {
+              ForEach(model.filteredRepos) { repo in
+                RepoSelectionRow(
+                  repo: repo,
+                  isSelected: model.selectedRepos.contains(repo.nameWithOwner)
+                ) {
+                  model.toggleRepoSelection(repo)
+                }
+              }
+            }
+          }
+        }
+        .frame(minHeight: 180, idealHeight: 240, maxHeight: 280)
+
+        Divider().overlay(DashboardTheme.border)
+
+        VStack(alignment: .leading, spacing: 6) {
+          FieldLabel(text: "Manual Repository or URL Fallback")
           TextField("OWNER/REPO or https://github.com/OWNER/REPO", text: $model.repoTarget)
             .textFieldStyle(.plain)
             .foregroundStyle(DashboardTheme.text)
             .dashboardFieldStyle()
         }
 
-        Text("The GUI passes this directly to the CLI engine. Repo URLs and custom GitHub hosts are supported.")
+        Text("If one or more repositories are checked above, the manual field is ignored. Use the manual field only when you want a one-off target that is not in the loaded list.")
           .font(.system(size: 12, weight: .medium, design: .rounded))
           .foregroundStyle(DashboardTheme.muted)
           .lineSpacing(2)
