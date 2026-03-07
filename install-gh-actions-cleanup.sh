@@ -7,15 +7,17 @@ APP_DISPLAY_NAME="GH Workflow Clean"
 APP_BUNDLE_NAME="${APP_DISPLAY_NAME}.app"
 APP_BUNDLE_ID="com.waynetechlab.ghworkflowclean"
 APP_EXECUTABLE_NAME="GHWorkflowCleanGUI"
-APP_VERSION="0.0.5"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
 SOURCE_GUI="${SCRIPT_DIR}/macos/GHWorkflowCleanGUI.swift"
 SOURCE_ICON="${SCRIPT_DIR}/assets/app-icon.svg"
+APP_VERSION="$(sed -n 's/^VERSION=\"\\([^\"]*\\)\"/\\1/p' "$SOURCE_SCRIPT" | head -n 1)"
+APP_VERSION="${APP_VERSION:-0.0.6}"
 
 INSTALL_CLI=1
 INSTALL_APP=1
+UNINSTALL_ONLY=0
 CLI_TARGET_DIR=""
 APP_TARGET_DIR=""
 TEMP_DIRS=""
@@ -27,7 +29,7 @@ die() {
 
 usage() {
   cat <<EOF
-Install ${APP_NAME} as a terminal command and/or a native macOS app bundle.
+Uninstall older copies, then install ${APP_NAME} as a terminal command and/or a native macOS app bundle.
 
 Usage:
   ./install-gh-actions-cleanup.sh [options]
@@ -35,6 +37,7 @@ Usage:
 Options:
   --cli-only           Install only the terminal command
   --app-only           Install only the native macOS GUI app bundle
+  --uninstall-only     Remove existing CLI and app installs, then exit
   --cli-dir DIR        Override the command install directory
   --app-dir DIR        Override the app install directory
   --help               Show this help text
@@ -44,6 +47,7 @@ Defaults:
   - app install: ~/Applications
 
 Notes:
+  - stale copies in /Applications, ~/Applications, and common CLI bin paths are removed first
   - the CLI has no GUI build dependency
   - the GUI app is compiled locally with the Swift toolchain on macOS
 EOF
@@ -77,6 +81,60 @@ cleanup_temp_dirs() {
   while IFS= read -r dir; do
     [[ -n "$dir" && -d "$dir" ]] && rm -rf -- "$dir"
   done <<<"$TEMP_DIRS"
+}
+
+stop_running_app() {
+  if pgrep -x "$APP_EXECUTABLE_NAME" >/dev/null 2>&1; then
+    printf "[info] Closing running app: %s\n" "$APP_DISPLAY_NAME"
+    pkill -x "$APP_EXECUTABLE_NAME" >/dev/null 2>&1 || true
+    sleep 1
+  fi
+}
+
+remove_existing_cli() {
+  local candidate=""
+  local path=""
+  local -a dirs=(
+    "/opt/homebrew/bin"
+    "/usr/local/bin"
+    "$HOME/.local/bin"
+    "$HOME/bin"
+  )
+
+  if [[ -n "$CLI_TARGET_DIR" ]]; then
+    dirs+=("$CLI_TARGET_DIR")
+  fi
+
+  for candidate in "${dirs[@]}"; do
+    path="$candidate/$APP_NAME"
+    if [[ -f "$path" || -L "$path" ]]; then
+      rm -f -- "$path"
+      printf "[info] Removed old command: %s\n" "$path"
+    fi
+  done
+}
+
+remove_existing_apps() {
+  local candidate=""
+  local bundle_path=""
+  local -a app_dirs=(
+    "/Applications"
+    "$HOME/Applications"
+  )
+
+  if [[ -n "$APP_TARGET_DIR" ]]; then
+    app_dirs+=("$APP_TARGET_DIR")
+  fi
+
+  stop_running_app
+
+  for candidate in "${app_dirs[@]}"; do
+    bundle_path="$candidate/$APP_BUNDLE_NAME"
+    if [[ -d "$bundle_path" ]]; then
+      rm -rf -- "$bundle_path"
+      printf "[info] Removed old app: %s\n" "$bundle_path"
+    fi
+  done
 }
 
 pick_cli_install_dir() {
@@ -158,6 +216,7 @@ install_cli() {
 
   [[ -f "$SOURCE_SCRIPT" ]] || die "Cannot find ${APP_NAME} in ${SCRIPT_DIR}"
 
+  remove_existing_cli
   install_dir="$(pick_cli_install_dir)"
   mkdir -p "$install_dir"
   cp "$SOURCE_SCRIPT" "$install_dir/$APP_NAME"
@@ -165,6 +224,7 @@ install_cli() {
   target_path="$install_dir/$APP_NAME"
 
   printf "[ok] Installed command: %s\n" "$target_path"
+  printf "[ok] Installed command version: %s\n" "$APP_VERSION"
 
   case ":$PATH:" in
     *":$install_dir:"*)
@@ -209,7 +269,7 @@ write_info_plist() {
   <key>CFBundleShortVersionString</key>
   <string>${APP_VERSION}</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>${APP_VERSION}</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>
@@ -265,11 +325,12 @@ install_app_bundle() {
   if [[ "$bundle_path" != */"$APP_BUNDLE_NAME" ]]; then
     die "Refusing to replace an unexpected app bundle path: $bundle_path"
   fi
-  rm -rf -- "$bundle_path"
+  remove_existing_apps
   mkdir -p "$resources_dir" "$macos_dir"
 
   cp "$SOURCE_SCRIPT" "$resources_dir/$APP_NAME"
   chmod +x "$resources_dir/$APP_NAME"
+  printf "%s\n" "$APP_VERSION" > "$resources_dir/VERSION"
 
   icon_icns="$(render_icon_icns)"
   cp "$icon_icns" "$resources_dir/AppIcon.icns"
@@ -279,6 +340,7 @@ install_app_bundle() {
   build_gui_executable "$executable_path"
 
   printf "[ok] Installed native macOS app: %s\n" "$bundle_path"
+  printf "[ok] Installed app version: %s\n" "$APP_VERSION"
   printf "[info] Open it from Finder, Spotlight, or Launchpad: %s\n" "$APP_DISPLAY_NAME"
 }
 
@@ -291,6 +353,12 @@ parse_args() {
         ;;
       --app-only)
         INSTALL_CLI=0
+        shift
+        ;;
+      --uninstall-only)
+        UNINSTALL_ONLY=1
+        INSTALL_CLI=0
+        INSTALL_APP=0
         shift
         ;;
       --cli-dir)
@@ -313,7 +381,7 @@ parse_args() {
     esac
   done
 
-  if [[ "$INSTALL_CLI" -eq 0 && "$INSTALL_APP" -eq 0 ]]; then
+  if [[ "$UNINSTALL_ONLY" -eq 0 && "$INSTALL_CLI" -eq 0 && "$INSTALL_APP" -eq 0 ]]; then
     die "Nothing selected to install"
   fi
 }
@@ -322,6 +390,23 @@ main() {
   trap cleanup_temp_dirs EXIT
   parse_args "$@"
   require_macos
+
+  printf "[info] Preparing %s %s\n" "$APP_DISPLAY_NAME" "$APP_VERSION"
+
+  if [[ "$UNINSTALL_ONLY" -eq 1 ]]; then
+    remove_existing_cli
+    remove_existing_apps
+    printf "[ok] Uninstall complete for %s\n" "$APP_DISPLAY_NAME"
+    exit 0
+  fi
+
+  printf "[info] Uninstalling older copies before install\n"
+  if [[ "$INSTALL_CLI" -eq 1 ]]; then
+    remove_existing_cli
+  fi
+  if [[ "$INSTALL_APP" -eq 1 ]]; then
+    remove_existing_apps
+  fi
 
   if [[ "$INSTALL_APP" -eq 1 ]] && ! has_swift_toolchain; then
     if [[ "$INSTALL_CLI" -eq 1 ]]; then

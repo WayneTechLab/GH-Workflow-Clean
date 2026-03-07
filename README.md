@@ -5,7 +5,7 @@
 - a native macOS GUI app
 - the original CLI engine
 
-Current release: `0.0.5`
+Current release: `0.0.6`
 
 ## What It Does
 
@@ -43,10 +43,12 @@ gh-actions-cleanup
 
 Installer behavior:
 
+- the bootstrap installer resolves the latest tagged release before downloading
 - the CLI installs everywhere GitHub CLI is available
 - the native GUI app is built automatically when the local Mac has a Swift toolchain
 - if Swift is missing, the installer falls back to CLI-only and tells you how to add the GUI later
 - when possible, the native app installs into `/Applications`; otherwise it falls back to `~/Applications`
+- older app and CLI copies are removed first so upgrades are clean
 
 ## Install
 
@@ -59,11 +61,14 @@ chmod +x gh-actions-cleanup install-gh-actions-cleanup.sh
 
 By default, the installer:
 
+- removes stale CLI installs from common macOS bin paths before installing the new version
+- removes stale app bundles from `/Applications` and `~/Applications` before reinstalling
 - installs the terminal command into a writable bin directory
 - installs a native macOS app bundle into `~/Applications`
 - prefers `/Applications` when that location is writable
 - compiles the GUI locally with Swift when the toolchain is available
 - generates the app icon locally during install
+- writes the current app version into the bundle metadata and bundled `VERSION` file
 - keeps GitHub authentication in the user's existing `gh` keychain session
 
 The installer is intended for macOS and will stop if you run it on another platform.
@@ -75,6 +80,7 @@ You can also install only one target:
 ```bash
 ./install-gh-actions-cleanup.sh --cli-only
 ./install-gh-actions-cleanup.sh --app-only
+./install-gh-actions-cleanup.sh --uninstall-only
 ```
 
 ## Quick Start

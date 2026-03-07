@@ -4,7 +4,7 @@ import Combine
 import UniformTypeIdentifiers
 
 private let appTitle = "GH Workflow Clean"
-private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.5"
+private let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.6"
 private let appSupportDir = NSString(string: "~/Library/Application Support/GH Workflow Clean").expandingTildeInPath
 private let lastSessionFile = (appSupportDir as NSString).appendingPathComponent("last-session.env")
 private let defaultSearchPaths = [
