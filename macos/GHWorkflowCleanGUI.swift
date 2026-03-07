@@ -917,12 +917,25 @@ struct ContentView: View {
 
 @main
 struct GHWorkflowCleanGUIApp: App {
+  @NSApplicationDelegateAdaptor(GHWorkflowCleanAppDelegate.self) private var appDelegate
+
   var body: some Scene {
     WindowGroup(appTitle) {
       ContentView()
     }
     .commands {
       CommandGroup(replacing: .newItem) { }
+    }
+  }
+}
+
+final class GHWorkflowCleanAppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    NSApp.setActivationPolicy(.regular)
+
+    if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+       let iconImage = NSImage(contentsOf: iconURL) {
+      NSApplication.shared.applicationIconImage = iconImage
     }
   }
 }

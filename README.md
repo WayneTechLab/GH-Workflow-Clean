@@ -5,7 +5,7 @@
 - a native macOS GUI app
 - the original CLI engine
 
-Current release: `0.0.2`
+Current release: `0.0.3`
 
 ## What It Does
 
@@ -46,6 +46,7 @@ Installer behavior:
 - the CLI installs everywhere GitHub CLI is available
 - the native GUI app is built automatically when the local Mac has a Swift toolchain
 - if Swift is missing, the installer falls back to CLI-only and tells you how to add the GUI later
+- when possible, the native app installs into `/Applications`; otherwise it falls back to `~/Applications`
 
 ## Install
 
@@ -60,6 +61,7 @@ By default, the installer:
 
 - installs the terminal command into a writable bin directory
 - installs a native macOS app bundle into `~/Applications`
+- prefers `/Applications` when that location is writable
 - compiles the GUI locally with Swift when the toolchain is available
 - generates the app icon locally during install
 - keeps GitHub authentication in the user's existing `gh` keychain session

@@ -7,7 +7,7 @@ APP_DISPLAY_NAME="GH Workflow Clean"
 APP_BUNDLE_NAME="${APP_DISPLAY_NAME}.app"
 APP_BUNDLE_ID="com.waynetechlab.ghworkflowclean"
 APP_EXECUTABLE_NAME="GHWorkflowCleanGUI"
-APP_VERSION="0.0.2"
+APP_VERSION="0.0.3"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SCRIPT="${SCRIPT_DIR}/${APP_NAME}"
@@ -109,6 +109,11 @@ pick_app_install_dir() {
     return 0
   fi
 
+  if [[ -d "/Applications" && -w "/Applications" ]]; then
+    printf "%s" "/Applications"
+    return 0
+  fi
+
   printf "%s" "$HOME/Applications"
 }
 
@@ -188,6 +193,8 @@ write_info_plist() {
   <key>CFBundleExecutable</key>
   <string>${APP_EXECUTABLE_NAME}</string>
   <key>CFBundleIconFile</key>
+  <string>AppIcon.icns</string>
+  <key>CFBundleIconName</key>
   <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>${APP_BUNDLE_ID}</string>
@@ -197,6 +204,8 @@ write_info_plist() {
   <string>${APP_DISPLAY_NAME}</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
   <key>CFBundleShortVersionString</key>
   <string>${APP_VERSION}</string>
   <key>CFBundleVersion</key>
